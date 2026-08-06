@@ -52,18 +52,19 @@ jobs:
       # Canal unlisted : signature quasi immédiate, sans revue éditoriale.
       # Pour passer en public plus tard, remplacer par --channel=listed (la toute
       # première soumission listed doit se faire à la main sur addons.mozilla.org).
+      # Les identifiants passent par l'environnement, jamais en arguments : web-ext
+      # lit nativement WEB_EXT_API_KEY / WEB_EXT_API_SECRET, et une ligne de commande
+      # est visible dans la liste des processus comme dans les messages d'erreur.
       - name: Signer via l'API AMO
         if: steps.check.outputs.publier == 'oui'
         env:
-          AMO_API_KEY:    ${{ secrets.AMO_API_KEY }}
-          AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}
+          WEB_EXT_API_KEY:    ${{ secrets.AMO_API_KEY }}
+          WEB_EXT_API_SECRET: ${{ secrets.AMO_API_SECRET }}
         run: |
           npx --yes web-ext sign \
             --source-dir=extension \
             --artifacts-dir=dist \
-            --channel=unlisted \
-            --api-key="$AMO_API_KEY" \
-            --api-secret="$AMO_API_SECRET"
+            --channel=unlisted
 
       - name: Publier le .xpi signé en release
         if: steps.check.outputs.publier == 'oui'
