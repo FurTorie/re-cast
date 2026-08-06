@@ -46,6 +46,23 @@ jobs:
             echo "publier=oui" >> "$GITHUB_OUTPUT"
           fi
 
+      # Sans ce contrôle, des secrets absents produisent une erreur d'authentification
+      # obscure au milieu de la sortie de web-ext, plusieurs minutes plus tard.
+      - name: Vérifier la présence des secrets AMO
+        if: steps.check.outputs.publier == 'oui'
+        env:
+          CLE:    ${{ secrets.AMO_API_KEY }}
+          SECRET: ${{ secrets.AMO_API_SECRET }}
+        run: |
+          manque=""
+          [ -z "$CLE" ]    && manque="$manque AMO_API_KEY"
+          [ -z "$SECRET" ] && manque="$manque AMO_API_SECRET"
+          if [ -n "$manque" ]; then
+            echo "::error::Secret(s) manquant(s) :$manque — les définir avec 'gh secret set <NOM>'"
+            exit 1
+          fi
+          echo "Les deux secrets AMO sont présents."
+
       - name: Vérifier l'extension
         if: steps.check.outputs.publier == 'oui'
         run: npx --yes web-ext lint --source-dir=extension
