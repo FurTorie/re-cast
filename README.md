@@ -77,6 +77,14 @@ La signature demande deux secrets GitHub, obtenus sur [addons.mozilla.org/develo
 
 Le canal est `unlisted` : signature en quelques minutes, sans revue éditoriale, distribution par les releases GitHub.
 
+### Mises à jour automatiques
+
+Une extension *unlisted* ne passe pas par addons.mozilla.org pour ses mises à jour : Firefox interroge l'URL déclarée dans `browser_specific_settings.gecko.update_url`, ici le fichier [`updates.json`](updates.json) à la racine du dépôt. Le workflow le réécrit après chaque release, une fois le `.xpi` publié pour que le lien qu'il contient soit déjà valide.
+
+Ce commit automatique ne touche qu'`updates.json`, hors du filtre `paths` du workflow : il ne peut donc pas déclencher une exécution en boucle.
+
+**À savoir si tu passes un jour en `listed`** : AMO refuse un `update_url` sur les extensions publiées chez lui, puisqu'il gère lui-même les mises à jour. Il faudra retirer la clé du manifeste à ce moment-là.
+
 ## Documentation technique
 
 [CLAUDE.md](CLAUDE.md) décrit l'architecture en détail, et surtout les nombreux pièges déjà rencontrés — choix de l'interface réseau pour le multicast, contournements du firmware Samsung, performance du proxy lors des déplacements dans la vidéo. À lire avant toute modification du réseau ou du proxy.

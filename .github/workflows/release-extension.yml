@@ -20,7 +20,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # nécessaire pour voir les tags déjà posés
+          fetch-depth: 0            # nécessaire pour voir les tags déjà posés
+          ref: ${{ github.ref_name }}  # rester sur la branche, pour pouvoir y pousser
 
       - uses: actions/setup-node@v4
         with:
@@ -76,4 +77,44 @@ jobs:
             Extension re:cast ${{ steps.v.outputs.version }}, signée par Mozilla (canal unlisted).
 
             Installation : télécharger le `.xpi` puis l'ouvrir dans Firefox.
+            Les installations existantes se mettront à jour toutes seules.
           files: dist/*.xpi
+
+      # updates.json est le manifeste que Firefox interroge pour savoir si une
+      # nouvelle version existe. Il est écrit APRÈS la release, pour que le lien
+      # de téléchargement qu'il contient soit déjà valide.
+      - name: Mettre à jour updates.json
+        if: steps.check.outputs.publier == 'oui'
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          TAG:     ${{ steps.v.outputs.tag }}
+          DEPOT:   ${{ github.repository }}
+        run: |
+          NOM=$(basename "$(ls dist/*.xpi | head -1)")
+          export LIEN="https://github.com/$DEPOT/releases/download/$TAG/$NOM"
+          echo "Lien de mise à jour : $LIEN"
+          node - <<'EOF'
+          const fs = require('fs');
+          const id = require('./extension/manifest.json').browser_specific_settings.gecko.id;
+          const j  = JSON.parse(fs.readFileSync('updates.json', 'utf8'));
+
+          j.addons[id] = j.addons[id] || { updates: [] };
+          const liste = j.addons[id].updates.filter(u => u.version !== process.env.VERSION);
+          liste.push({ version: process.env.VERSION, update_link: process.env.LIEN });
+          liste.sort((a, b) => a.version.localeCompare(b.version, undefined, { numeric: true }));
+
+          j.addons[id].updates = liste;
+          fs.writeFileSync('updates.json', JSON.stringify(j, null, 2) + '\n');
+          EOF
+
+      # Ce commit ne touche qu'updates.json, hors du filtre `paths` du workflow :
+      # il ne peut donc pas déclencher une nouvelle exécution en boucle.
+      - name: Committer updates.json
+        if: steps.check.outputs.publier == 'oui'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add updates.json
+          git diff --staged --quiet && echo "rien à committer" && exit 0
+          git commit -m "updates.json : extension ${{ steps.v.outputs.version }}"
+          git push
