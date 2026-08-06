@@ -6,9 +6,6 @@ name: Publier l'extension
 on:
   push:
     branches: [main]
-    paths:
-      - 'extension/**'
-      - '.github/workflows/release-extension.yml'
   workflow_dispatch:
 
 permissions:
