@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>re:cast</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>re:cast</h1>
+      <span id="daemon-status" class="status-dot offline" title="Daemon hors ligne"></span>
+    </header>
+
+    <div id="daemon-config">
+      <input id="daemon-ip-input" type="text" placeholder="IP du daemon (ex: 192.168.1.14:7171)" />
+      <button id="btn-save-daemon" title="Enregistrer l'adresse du daemon">✓</button>
+    </div>
+
+    <section id="stream-section">
+      <p class="label">Stream détecté</p>
+      <div id="stream-info" class="stream-info">
+        <span id="stream-url">Aucun stream détecté</span>
+      </div>
+    </section>
+
+    <section id="devices-section">
+      <div class="section-head">
+        <p class="label">Appareils</p>
+        <button id="btn-scan" class="btn-mini">🔍 Rechercher</button>
+      </div>
+      <ul id="device-list">
+        <li class="loading">Chargement…</li>
+      </ul>
+
+      <details id="manual-add-wrap">
+        <summary>+ Ajouter par IP</summary>
+        <div id="manual-add">
+          <input id="manual-ip" type="text" placeholder="IP (ex: 192.168.1.10)" />
+          <input id="manual-name" type="text" placeholder="Nom (optionnel)" />
+          <button id="btn-add-manual">Ajouter et enregistrer</button>
+          <p id="manual-msg"></p>
+        </div>
+      </details>
+    </section>
+
+    <button id="btn-cast" disabled>📡 Caster</button>
+    <button id="btn-stop" style="display:none">⏹ Arrêter</button>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

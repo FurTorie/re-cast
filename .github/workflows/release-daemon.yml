@@ -1,0 +1,80 @@
+name: Publier le daemon
+
+# Même principe que pour l'extension, mais piloté par daemon/package.json.
+# Les deux moitiés évoluent donc indépendamment : toucher au daemon ne déclenche
+# jamais de soumission à Mozilla, et inversement.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'daemon/**'
+      - '.github/workflows/release-daemon.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publier:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Lire la version du daemon
+        id: v
+        run: |
+          VERSION=$(node -p "require('./daemon/package.json').version")
+          echo "version=$VERSION"     >> "$GITHUB_OUTPUT"
+          echo "tag=daemon-v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Cette version est-elle déjà publiée ?
+        id: check
+        run: |
+          if git rev-parse "refs/tags/${{ steps.v.outputs.tag }}" >/dev/null 2>&1; then
+            echo "publier=non" >> "$GITHUB_OUTPUT"
+            echo "::notice::Version ${{ steps.v.outputs.version }} déjà publiée — rien à faire."
+          else
+            echo "publier=oui" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Installer les dépendances
+        if: steps.check.outputs.publier == 'oui'
+        working-directory: daemon
+        run: npm ci || npm install
+
+      - name: Contrôle de syntaxe
+        if: steps.check.outputs.publier == 'oui'
+        working-directory: daemon
+        run: |
+          for f in index.js server.js proxy.js discovery.js cast/*.js; do
+            node --check "$f"
+          done
+
+      # TODO (quand l'app sera au programme) : produire ici un exécutable autonome
+      # avec Node SEA ou pkg, pour ne plus dépendre d'une installation de Node.
+      # Pour l'instant on publie simplement les sources du daemon.
+      - name: Préparer l'archive
+        if: steps.check.outputs.publier == 'oui'
+        run: |
+          mkdir -p dist
+          tar --exclude=node_modules -czf "dist/recast-daemon-${{ steps.v.outputs.version }}.tar.gz" daemon
+          cd daemon && zip -qr "../dist/recast-daemon-${{ steps.v.outputs.version }}.zip" . -x 'node_modules/*'
+
+      - name: Publier la release
+        if: steps.check.outputs.publier == 'oui'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.v.outputs.tag }}
+          name: Daemon ${{ steps.v.outputs.version }}
+          body: |
+            Daemon re:cast ${{ steps.v.outputs.version }}.
+
+            Installation : décompresser, puis `npm install` et `node index.js`.
+            Nécessite Node.js 18 ou plus.
+          files: dist/*

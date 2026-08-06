@@ -1,0 +1,53 @@
+{
+  "manifest_version": 2,
+  "name": "re:cast",
+  "version": "0.1.2",
+  "description": "Cast universel en r\u00e9solution native depuis Firefox",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "recast@recast-extension",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ],
+        "optional": []
+      }
+    },
+    "gecko_android": {
+      "strict_min_version": "140.0"
+    }
+  },
+  "permissions": [
+    "webRequest",
+    "tabs",
+    "activeTab",
+    "storage",
+    "<all_urls>"
+  ],
+  "background": {
+    "scripts": [
+      "background/background.js"
+    ]
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content/content.js"
+      ],
+      "css": [
+        "content/content.css"
+      ]
+    }
+  ],
+  "browser_action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "48": "icons/icon-48.png",
+      "96": "icons/icon-96.png"
+    }
+  }
+}

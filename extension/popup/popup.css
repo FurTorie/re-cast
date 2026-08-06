@@ -1,0 +1,394 @@
+/* re:cast - popup.css */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* Le fond doit être sur html aussi : sur Firefox Android le popup s'ouvre en vue
+   plein écran, et body ne couvre pas forcément tout l'écran. */
+html, body {
+  background: #1a1a2e;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  color: #eee;
+  /* min-width donne sa largeur au popup desktop (qui se dimensionne au contenu),
+     width: 100% laisse la vue plein écran mobile occuper tout l'écran. */
+  min-width: 280px;
+  width: 100%;
+  min-height: 200px;
+}
+
+#app {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+h1 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #e74c3c;
+  letter-spacing: 1px;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  cursor: help;
+  flex: none;
+}
+.status-dot.online  { background: #2ecc71; }
+.status-dot.offline { background: #e74c3c; }
+
+.label {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #888;
+  margin-bottom: 4px;
+}
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.btn-mini {
+  background: #0f3460;
+  color: #eee;
+  border: none;
+  border-radius: 5px;
+  padding: 5px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  flex: none;
+  transition: background 0.15s;
+}
+
+.btn-mini:hover:not(:disabled)  { background: #e74c3c; color: #fff; }
+.btn-mini:active:not(:disabled) { background: #c0392b; color: #fff; }
+.btn-mini:disabled              { opacity: 0.5; cursor: default; }
+
+.stream-info {
+  background: #16213e;
+  border-radius: 6px;
+  padding: 8px;
+  word-break: break-all;
+  font-size: 11px;
+  color: #aaa;
+  max-height: 50px;
+  overflow: hidden;
+}
+
+.stream-info .detected {
+  color: #2ecc71;
+}
+
+/* ── Liste d'appareils ─────────────────────────────────────────────────────── */
+
+#device-list {
+  list-style: none;
+  background: #16213e;
+  border-radius: 6px;
+  overflow: hidden;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+#device-list li {
+  border-bottom: 1px solid #0f3460;
+}
+#device-list li:last-child { border-bottom: none; }
+
+#device-list li.device {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+#device-list li.device:hover  { background: #0f3460; }
+#device-list li.device:active { background: #14406f; }
+
+#device-list li.device.selected {
+  background: #e74c3c22;
+  box-shadow: inset 3px 0 0 #e74c3c;
+}
+#device-list li.device.selected .dev-name { color: #e74c3c; }
+
+.dev-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.dev-name {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dev-meta {
+  font-size: 10px;
+  color: #777;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dev-star {
+  background: none;
+  border: none;
+  color: #555;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  flex: none;
+  padding: 6px;
+  border-radius: 5px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.dev-star.on           { color: #f1c40f; }
+.dev-star:hover        { background: rgba(255,255,255,0.08); color: #f1c40f; }
+.dev-star:active       { background: rgba(255,255,255,0.16); }
+
+/* Boutons secondaires d'une ligne : renommer, valider, annuler */
+.dev-btn {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  flex: none;
+  padding: 6px;
+  border-radius: 5px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.dev-btn:hover  { background: rgba(255,255,255,0.08); color: #fff; }
+.dev-btn:active { background: rgba(255,255,255,0.16); }
+
+/* ── Renommage en place ────────────────────────────────────────────────────── */
+
+#device-list li.device.editing {
+  cursor: default;
+  gap: 6px;
+}
+
+#device-list li.device.editing:hover { background: none; }
+
+.dev-edit {
+  flex: 1;
+  min-width: 0;
+  background: #0f3460;
+  border: 1px solid #e74c3c;
+  border-radius: 5px;
+  color: #eee;
+  font-size: 13px;
+  padding: 6px 8px;
+  outline: none;
+}
+
+.dev-edit::placeholder { color: #6b7fa3; }
+
+#device-list li.loading,
+#device-list li.empty {
+  padding: 8px 10px;
+  color: #666;
+  font-style: italic;
+}
+
+/* ── Config daemon ─────────────────────────────────────────────────────────── */
+
+#daemon-config {
+  display: flex;
+  gap: 4px;
+}
+
+#daemon-ip-input {
+  flex: 1;
+  min-width: 0;
+  background: #16213e;
+  border: 1px solid #0f3460;
+  border-radius: 5px;
+  color: #eee;
+  font-size: 11px;
+  padding: 5px 8px;
+  outline: none;
+}
+
+#daemon-ip-input:focus { border-color: #e74c3c; }
+#daemon-ip-input::placeholder { color: #555; }
+
+#btn-save-daemon {
+  background: #0f3460;
+  color: #eee;
+  border: none;
+  border-radius: 5px;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  flex: none;
+  transition: background 0.15s;
+}
+
+#btn-save-daemon:hover  { background: #2ecc71; color: #fff; }
+#btn-save-daemon:active { background: #27ae60; color: #fff; }
+
+/* ── Ajout manuel ──────────────────────────────────────────────────────────── */
+
+#manual-add-wrap {
+  margin-top: 6px;
+}
+
+#manual-add-wrap summary {
+  font-size: 11px;
+  color: #888;
+  cursor: pointer;
+  padding: 4px 0;
+  list-style: none;
+}
+
+#manual-add-wrap summary::-webkit-details-marker { display: none; }
+#manual-add-wrap summary:hover { color: #e74c3c; }
+
+#manual-add {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+#manual-add input {
+  background: #16213e;
+  border: 1px solid #0f3460;
+  border-radius: 5px;
+  color: #eee;
+  font-size: 11px;
+  padding: 5px 8px;
+  outline: none;
+}
+
+#manual-add input:focus { border-color: #e74c3c; }
+#manual-add input::placeholder { color: #555; }
+
+#btn-add-manual {
+  background: #0f3460;
+  color: #eee;
+  border: none;
+  border-radius: 5px;
+  padding: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+#btn-add-manual:hover:not(:disabled)  { background: #e74c3c; color: #fff; }
+#btn-add-manual:active:not(:disabled) { background: #c0392b; color: #fff; }
+#btn-add-manual:disabled              { opacity: 0.5; cursor: default; }
+
+#manual-msg:empty { display: none; }
+#manual-msg {
+  font-size: 10px;
+  line-height: 1.35;
+  padding: 4px 2px;
+}
+#manual-msg.ok   { color: #2ecc71; }
+#manual-msg.warn { color: #f1c40f; }
+
+/* ── Actions principales ───────────────────────────────────────────────────── */
+
+#btn-cast {
+  background: #e74c3c;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+#btn-cast:hover:not(:disabled)  { background: #c0392b; }
+#btn-cast:active:not(:disabled) { background: #a93226; }
+#btn-cast:disabled { opacity: 0.4; cursor: not-allowed; }
+
+#btn-stop {
+  background: #444;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+#btn-stop:hover  { background: #333; }
+#btn-stop:active { background: #222; }
+
+/* ── Vue plein écran (Firefox Android) ─────────────────────────────────────── */
+/* Le popup s'ouvre en pleine page : on agrandit les cibles tactiles et on libère
+   la hauteur de la liste d'appareils, qui n'a plus de raison d'être bridée. */
+
+@media (min-width: 400px) {
+  body { font-size: 15px; }
+
+  #app { padding: 16px; gap: 16px; }
+
+  h1 { font-size: 22px; }
+
+  .label, .dev-meta, #manual-add-wrap summary { font-size: 12px; }
+
+  .btn-mini { font-size: 13px; padding: 10px 14px; }
+
+  #device-list { max-height: 45vh; }
+
+  #device-list li.device { padding: 12px; gap: 12px; min-height: 56px; }
+
+  .dev-name { font-size: 15px; }
+
+  .dev-star { font-size: 24px; padding: 10px; }
+
+  .dev-btn { font-size: 18px; padding: 10px; }
+
+  /* 16px minimum : en dessous, Android zoome au focus */
+  .dev-edit { font-size: 16px; padding: 10px 12px; }
+
+  /* 16px minimum sur les champs : en dessous, Android peut zoomer au focus */
+  #daemon-ip-input, #manual-add input { font-size: 16px; padding: 10px 12px; }
+
+  #btn-save-daemon { font-size: 16px; padding: 10px 16px; }
+
+  #btn-add-manual { font-size: 14px; padding: 12px; }
+
+  #manual-msg { font-size: 12px; }
+
+  .stream-info { font-size: 12px; max-height: 70px; }
+
+  #btn-cast { padding: 16px; font-size: 17px; }
+
+  #btn-stop { padding: 14px; font-size: 15px; }
+}

@@ -1,0 +1,78 @@
+name: Publier l'extension
+
+# Déclenché par une modification sous extension/, mais ne publie que si la version
+# de manifest.json a réellement changé. La source de vérité est donc le manifeste :
+# on incrémente "version" dedans, on pousse, et la publication part toute seule.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'extension/**'
+      - '.github/workflows/release-extension.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publier:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # nécessaire pour voir les tags déjà posés
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Lire la version du manifeste
+        id: v
+        run: |
+          VERSION=$(node -p "require('./extension/manifest.json').version")
+          echo "version=$VERSION"        >> "$GITHUB_OUTPUT"
+          echo "tag=extension-v$VERSION" >> "$GITHUB_OUTPUT"
+
+      # Le tag fait office de registre des versions déjà publiées : c'est plus
+      # robuste qu'un diff entre commits (résiste aux re-runs et aux force-push).
+      - name: Cette version est-elle déjà publiée ?
+        id: check
+        run: |
+          if git rev-parse "refs/tags/${{ steps.v.outputs.tag }}" >/dev/null 2>&1; then
+            echo "publier=non" >> "$GITHUB_OUTPUT"
+            echo "::notice::Version ${{ steps.v.outputs.version }} déjà publiée — rien à faire."
+          else
+            echo "publier=oui" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Vérifier l'extension
+        if: steps.check.outputs.publier == 'oui'
+        run: npx --yes web-ext lint --source-dir=extension
+
+      # Canal unlisted : signature quasi immédiate, sans revue éditoriale.
+      # Pour passer en public plus tard, remplacer par --channel=listed (la toute
+      # première soumission listed doit se faire à la main sur addons.mozilla.org).
+      - name: Signer via l'API AMO
+        if: steps.check.outputs.publier == 'oui'
+        env:
+          AMO_API_KEY:    ${{ secrets.AMO_API_KEY }}
+          AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}
+        run: |
+          npx --yes web-ext sign \
+            --source-dir=extension \
+            --artifacts-dir=dist \
+            --channel=unlisted \
+            --api-key="$AMO_API_KEY" \
+            --api-secret="$AMO_API_SECRET"
+
+      - name: Publier le .xpi signé en release
+        if: steps.check.outputs.publier == 'oui'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.v.outputs.tag }}
+          name: Extension ${{ steps.v.outputs.version }}
+          body: |
+            Extension re:cast ${{ steps.v.outputs.version }}, signée par Mozilla (canal unlisted).
+
+            Installation : télécharger le `.xpi` puis l'ouvrir dans Firefox.
+          files: dist/*.xpi

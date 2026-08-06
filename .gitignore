@@ -1,0 +1,24 @@
+# Dépendances
+node_modules/
+
+# Signature AMO : artefact de build, régénéré à chaque signature et invalidé par
+# la moindre modification sous extension/. Ne jamais versionner.
+extension/META-INF/
+
+# Sorties de build et extensions signées
+dist/
+web-ext-artifacts/
+*.xpi
+*.zip
+
+# Identifiants AMO — ne doivent JAMAIS être commités, ils vivent dans les
+# secrets GitHub (AMO_API_KEY / AMO_API_SECRET)
+.env
+.env.*
+.web-ext-config.js
+
+# Logs et divers
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
