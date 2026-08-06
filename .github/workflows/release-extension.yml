@@ -63,9 +63,13 @@ jobs:
           fi
           echo "Les deux secrets AMO sont présents."
 
+      # --self-hosted est indispensable ici : sans lui, le linter applique les règles
+      # des extensions hébergées par Mozilla et rejette `update_url` en ERREUR, alors
+      # que cette clé est précisément ce qui permet à une extension auto-hébergée de
+      # se mettre à jour toute seule.
       - name: Vérifier l'extension
         if: steps.check.outputs.publier == 'oui'
-        run: npx --yes web-ext lint --source-dir=extension
+        run: npx --yes web-ext lint --source-dir=extension --self-hosted
 
       # Canal unlisted : signature quasi immédiate, sans revue éditoriale.
       # Pour passer en public plus tard, remplacer par --channel=listed (la toute
