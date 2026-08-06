@@ -68,7 +68,15 @@ Les deux moitiés se versionnent séparément, et chacune déclenche sa propre p
 | `extension/manifest.json` → `version` | signature par Mozilla, puis release GitHub du `.xpi` |
 | `daemon/package.json` → `version` | archive du daemon en release GitHub |
 
-Rien ne part tant que le numéro de version n'a pas changé : un tag `extension-vX.Y.Z` ou `daemon-vX.Y.Z` marque ce qui est déjà publié.
+Rien ne part tant que le numéro de version n'a pas changé : un tag `extension-vX.Y.Z` ou `daemon-vX.Y.Z` marque ce qui est déjà publié. Republier une version déjà connue d'AMO échouerait de toute façon côté Mozilla.
+
+Si le push ne déclenche rien (voir plus bas), le lancement manuel fait exactement la même chose :
+
+```bash
+gh workflow run release-extension.yml
+```
+
+> **Déclenchement par push encore inactif sur ce dépôt.** Vérifié le 2026-08-06 : les `PushEvent` arrivent bien chez GitHub, les workflows sont enregistrés et actifs, mais aucun run n'est créé — y compris après avoir retiré le filtre de chemins, ce qui l'innocente. Le lancement manuel, lui, fonctionne. C'est un comportement fréquent sur un dépôt tout juste créé ; il se débloque généralement seul. En attendant, utiliser `gh workflow run`.
 
 La signature demande deux secrets GitHub, obtenus sur [addons.mozilla.org/developers/addon/api/key](https://addons.mozilla.org/developers/addon/api/key/) :
 
