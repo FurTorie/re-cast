@@ -336,7 +336,13 @@ namespace Recast
     class TrayApp : ApplicationContext
     {
         const int PORT = 7171;
-        const int MAX_LIGNES = 600;          // ~60 Ko de journal, largement assez pour diagnostiquer
+        // 600 était trop court, et pas d'un peu : un cast écrit TROIS lignes par
+        // segment, et un manifeste en compte couramment 143 — relus à chaque saut.
+        // Une seule lecture évinçait donc tout ce qui l'a précédée, y compris le
+        // démarrage et les versions, c'est-à-dire précisément ce qu'on veut lire
+        // dans un rapport de bug. 2000 lignes tiennent un cast entier pour ~200 Ko,
+        // sans rien changer d'observable à l'empreinte de l'app.
+        const int MAX_LIGNES = 2000;
         const int SONDAGE_REPOS = 10000;     // au repos, rien ne change vite
         const int SONDAGE_LECTURE = 3000;    // pendant une lecture, on veut voir l'arrêt rapidement
 
@@ -363,6 +369,8 @@ namespace Recast
         readonly SynchronizationContext ui;
         MiseAJour.Info majDispo;
         bool majEnCours;
+        DateTime? derniereVerif;    // affiché dans le menu : le journal, lui, défile
+        bool derniereVerifOk;
         bool portOccupe;         // le daemon a refusé de démarrer, port déjà pris
         string versionDaemon;    // lues dans /status, pour les rapports de bug
         string versionExtension;
@@ -658,6 +666,12 @@ namespace Recast
                         : adresse != null   ? (NotreDaemonTourne ? "actif" : "usurpe")
                         : portOccupe        ? "occupe"
                                             : "arrete";
+
+            // L'âge de la dernière vérification fait partie de la signature, sinon
+            // « il y a 3 min » resterait figé tant que rien d'autre ne bouge — et
+            // un menu qui ment sur la fraîcheur est pire que pas d'indication.
+            etat += "|" + EtatVerif();
+
             if (etat == dernierEtat) return;
             dernierEtat = etat;
             Rafraichir();
@@ -694,8 +708,15 @@ namespace Recast
                 entree = DateTime.Now.ToString("HH:mm:ss") + "  " + ligne;
                 journal.Add(entree);
                 if (journal.Count > MAX_LIGNES) journal.RemoveAt(0);
-                if (ligne.IndexOf("ERREUR", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    ligne.IndexOf("Error",  StringComparison.OrdinalIgnoreCase) >= 0)
+                // Même piège que dans CouleurDe() : « Error » cherché en sous-chaîne
+                // comptait « prone to errors » comme une erreur, et le compteur du
+                // menu montait tout seul. Un avertissement Node n'est pas une erreur ;
+                // une vraie erreur .NET s'écrit toujours « QuelqueChoseError: ».
+                bool avertissement = ligne.Contains("Warning:") || ligne.Contains("(Use `node");
+                if (!avertissement &&
+                    (ligne.IndexOf("ERREUR",  StringComparison.OrdinalIgnoreCase) >= 0 ||
+                     ligne.IndexOf("Error:",  StringComparison.OrdinalIgnoreCase) >= 0 ||
+                     ligne.IndexOf("échec",   StringComparison.OrdinalIgnoreCase) >= 0))
                     nbErreurs++;
             }
 
@@ -872,7 +893,14 @@ namespace Recast
             verif.Click += (s, e) => ChercherMaj(true);
             menu.Items.Add(verif);
 
-            menu.Items.Add(Inerte("     version " + Court(MiseAJour.Courante())));
+            // Le résultat de la vérification était journalisé, et uniquement là.
+            // Le journal est un tampon glissant de MAX_LIGNES, et un seul cast écrit
+            // trois lignes par segment — 143 segments, relus à chaque saut. La ligne
+            // « Vérification (automatique) » était donc évincée en quelques minutes,
+            // ce qui donnait l'impression que la vérification n'avait jamais lieu.
+            // Ici, elle ne peut pas défiler.
+            menu.Items.Add(Inerte("     version " + Court(MiseAJour.Courante())
+                                  + " · " + EtatVerif()));
 
             menu.Items.Add(new ToolStripSeparator());
 
@@ -888,6 +916,23 @@ namespace Recast
         static ToolStripMenuItem Inerte(string texte)
         {
             return new ToolStripMenuItem(texte) { Enabled = false };
+        }
+
+        // « jamais vérifié » n'est pas un détail : c'est ce qui distingue une
+        // vérification qui n'a pas encore eu lieu d'une vérification muette parce
+        // que tout va bien. Sans cette nuance, les deux se ressemblent.
+        string EtatVerif()
+        {
+            if (majEnCours)              return "vérification…";
+            if (!derniereVerif.HasValue) return "jamais vérifié";
+
+            var age = DateTime.Now - derniereVerif.Value;
+            string quand = age.TotalMinutes < 1  ? "à l'instant"
+                         : age.TotalMinutes < 60 ? "il y a " + (int)age.TotalMinutes + " min"
+                         : age.TotalHours   < 24 ? "il y a " + (int)age.TotalHours + " h"
+                                                 : "il y a " + (int)age.TotalDays + " j";
+
+            return (derniereVerifOk ? "vérifié " : "échec, ") + quand;
         }
 
         static string Tronquer(string t, int n)
@@ -1005,11 +1050,18 @@ namespace Recast
 
                 Post(() =>
                 {
+                    derniereVerif   = DateTime.Now;
+                    derniereVerifOk = !erreur;
+
                     if (info == null)
                     {
                         Ajouter(erreur
                             ? "[app] Vérification impossible (réseau ou API GitHub)."
                             : "[app] À jour — version " + Court(MiseAJour.Courante()) + ".");
+
+                        // Le menu porte désormais l'état : il doit suivre même quand
+                        // la vérification est automatique et sans nouvelle.
+                        Rafraichir();
 
                         if (!manuel) return;
 
