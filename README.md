@@ -1,16 +1,69 @@
-# re:cast
+<p align="center">
+  <img src="docs/logo.png" alt="re:cast" width="112">
+</p>
 
-Caster une vidéo depuis Firefox vers une TV, en résolution native, sans passer par le partage d'écran.
+<h1 align="center">re:cast</h1>
 
-Le projet a deux moitiés indépendantes qui communiquent en HTTP :
+<p align="center">
+  <b>Caster une vidéo depuis Firefox vers une TV, en résolution native.</b><br>
+  Sans partage d'écran, sans compte, sans cloud — tout reste sur le réseau local.
+</p>
+
+<p align="center">
+  <!-- sort=semver est indispensable : par défaut shields trie les tags dans
+       l'ordre alphabétique, et annonçait donc app-v0.1.9 alors que la dernière
+       version publiée était app-v0.1.20. -->
+  <a href="../../releases"><img alt="App Windows" src="https://img.shields.io/github/v/release/FurTorie/re-cast?filter=app-*&sort=semver&label=app%20Windows&color=E74C3C"></a>
+  <a href="../../releases"><img alt="Extension Firefox" src="https://img.shields.io/github/v/release/FurTorie/re-cast?filter=extension-*&sort=semver&label=extension&color=E74C3C"></a>
+  <img alt="Plateformes" src="https://img.shields.io/badge/cast-Chromecast%20%C2%B7%20DLNA%20%C2%B7%20AirPlay-2C3E50">
+</p>
+
+---
+
+## Le problème
+
+Le partage d'écran d'un téléphone renvoie ce que l'écran affiche : une image déjà décodée, redimensionnée, recompressée à la volée. On y perd la définition, la batterie fond, et le moindre appel coupe la vidéo.
+
+re:cast ne partage pas l'écran. Il **repère l'URL du flux** que le lecteur est en train de lire et **donne cette adresse à la TV**, qui va chercher la vidéo elle-même. La TV décode son flux d'origine, en pleine résolution. Le téléphone n'est plus qu'une télécommande : on peut le verrouiller, quitter Firefox, ou sortir de la pièce — la lecture continue.
+
+## À quoi ça ressemble
+
+<p align="center">
+  <img src="docs/extension.png" alt="Le popup de l'extension Firefox" width="620">
+</p>
+
+Le popup de l'extension : l'adresse du PC, le flux détecté sur la page, les appareils trouvés sur le réseau. Un même téléviseur apparaît une fois par protocole qu'il annonce.
+
+<p align="center">
+  <img src="docs/menu.png" alt="Le menu de l'app Windows" height="250">
+  &nbsp;&nbsp;
+  <img src="docs/console.png" alt="La console de l'app Windows" height="250">
+</p>
+
+Côté PC, une icône dans la zone de notification garde le serveur vivant. Sa console montre en couleurs ce qui entre et ce qui sort — c'est là qu'on lit pourquoi un cast échoue.
+
+## Comment c'est fait
+
+Trois morceaux indépendants, qui se parlent en HTTP :
 
 | | Rôle |
 |---|---|
 | `extension/` | Add-on Firefox (Manifest V2). Détecte l'URL du flux et sert de télécommande. |
-| `daemon/` | Serveur Node local. Découvre les appareils, proxifie le flux, parle Chromecast / DLNA. |
+| `daemon/` | Serveur Node local. Découvre les appareils, proxifie le flux, parle Chromecast / DLNA / AirPlay. |
 | `app/` | App Windows de barre des tâches. Garde le daemon vivant en arrière-plan. |
 
+**L'extension ne parle jamais directement à une TV.** Elle ne fait que poster vers le daemon, qui s'occupe du reste.
+
 **La cible principale est Firefox pour Android.** Le téléphone porte l'extension, le PC fait tourner le daemon et relaie le flux. Ce découpage n'est pas un accident : le cast étant délégué au daemon, la lecture survit au verrouillage du téléphone, à la mise en arrière-plan de Firefox et à la perte du Wi-Fi.
+
+Le daemon fait plus que transmettre une adresse. Il se met **entre la TV et le CDN** parce que ni l'un ni l'autre ne se comprennent directement : il ajoute le `Referer` sans lequel beaucoup de CDN répondent 403, sert en HTTP un flux qui n'existe qu'en HTTPS, raccourcit des URLs qu'un firmware n'avale pas, et réécrit les playlists HLS pour que chaque segment repasse par lui. C'est l'essentiel du code, et [CLAUDE.md](CLAUDE.md) explique pourquoi chaque couche existe.
+
+## Ce qu'il faut
+
+- **Node.js 18+** sur le PC — le daemon en dépend, l'installateur le vérifie et le signale.
+- **Firefox**, sur téléphone ou sur PC.
+- **Une TV Chromecast, DLNA ou AirPlay** sur le même réseau.
+- **Windows** pour l'app de barre des tâches. Le daemon, lui, tourne partout où Node tourne.
 
 ## Installation
 
@@ -78,7 +131,9 @@ Se fier au seul nom `node` serait une erreur : d'autres logiciels tournent sous 
 .\app\Recast.exe
 ```
 
-La compilation utilise le compilateur C# livré avec Windows — aucun SDK, aucune dépendance npm. L'exécutable pèse **18 Ko**. La version vient de `app/version.txt`, qui pilote aussi la publication ; `build.ps1` l'injecte dans les propriétés du fichier et génère `icon.ico` à partir du PNG.
+La compilation utilise le compilateur C# livré avec Windows — aucun SDK, aucune dépendance npm. L'exécutable pèse **79 Ko**, dont une bonne moitié d'icône multi-tailles embarquée. La version vient de `app/version.txt`, qui pilote aussi la publication ; `build.ps1` l'injecte dans les propriétés du fichier.
+
+Le logo est **dessiné**, pas rééchantillonné : [`app/logo.cs`](app/logo.cs) compose chaque taille à partir des contours de la police, de 16 à 256 px, et écrit le conteneur `.ico` à la main. Une icône multi-tailles ne peut pas venir d'un seul bitmap, et une seule composition ne tient pas de 16 à 256 px — d'où trois variantes (`R:`, `RE:`, puis le bloc complet à partir de 48 px). Le générateur se compile avec le même `csc` que l'app, donc aucun outil supplémentaire, et les icônes de l'extension en sortent aussi : une seule source, sinon les deux logos finiraient par diverger.
 
 Le menu, au clic sur l'icône, donne :
 
@@ -134,10 +189,10 @@ La console de l'app a un bouton **« Copier le rapport »**. Il produit un texte
 
 ```
 ═══ re:cast — rapport ═══
-date       : 2026-08-07 14:52:10
-app        : 0.1.14
-daemon     : 0.1.8
-extension  : 0.1.6
+date       : 2026-08-07 16:33:38
+app        : 0.1.20
+daemon     : 0.1.10
+extension  : 0.1.7
 Windows    : 10.0.28000.0 64 bits
 adresse    : 192.168.1.16:7171
 lecture    : 85" QLED (CHROMECAST)
@@ -184,7 +239,7 @@ curl http://localhost:7171/devices
 
 ## Publication
 
-Les deux moitiés se versionnent séparément, et chacune déclenche sa propre publication :
+Les trois moitiés se versionnent séparément, et chacune déclenche sa propre publication :
 
 | Fichier modifié | Effet |
 |---|---|
@@ -220,6 +275,8 @@ Le canal est `unlisted` : signature en quelques minutes, sans revue éditoriale,
 Une extension *unlisted* ne passe pas par addons.mozilla.org pour ses mises à jour : Firefox interroge l'URL déclarée dans `browser_specific_settings.gecko.update_url`, ici le fichier [`updates.json`](updates.json) à la racine du dépôt. Le workflow le réécrit après chaque release, une fois le `.xpi` publié pour que le lien qu'il contient soit déjà valide.
 
 Ce commit automatique ne touche qu'`updates.json`, hors du filtre `paths` du workflow : il ne peut donc pas déclencher une exécution en boucle.
+
+**Son push est réessayé avec rebase, et ce n'est pas une précaution gratuite.** La signature AMO prend plusieurs minutes, pendant lesquelles le dépôt reçoit sans mal d'autres commits — un dépôt à trois moitiés publiées séparément y invite. Le push partait alors d'une base périmée, se faisait rejeter, et `updates.json` restait en arrière **sans que rien ne le montre** : la release existait, le `.xpi` était signé et publié, seul le fichier que Firefox interroge ne bougeait pas. Les versions 0.1.6 et 0.1.7 ont été perdues ainsi avant que ce soit corrigé.
 
 **À savoir si tu passes un jour en `listed`** : AMO refuse un `update_url` sur les extensions publiées chez lui, puisqu'il gère lui-même les mises à jour. Il faudra retirer la clé du manifeste à ce moment-là.
 
