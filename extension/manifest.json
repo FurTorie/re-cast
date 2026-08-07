@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
   "name": "re:cast",
-  "version": "0.1.7",
-  "description": "Cast universel en résolution native depuis Firefox",
+  "version": "0.1.8",
+  "description": "Caster la vidéo d'un onglet vers une TV Chromecast, DLNA ou AirPlay, en résolution native. Nécessite le daemon re:cast sur un PC du réseau.",
   "browser_specific_settings": {
     "gecko": {
       "id": "recast@recast-extension",
