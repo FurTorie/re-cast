@@ -276,6 +276,13 @@ namespace Recast
 
         readonly NotifyIcon icone;
         readonly Timer sondage;
+
+        // UN SEUL ContextMenuStrip pour toute la vie de l'app. Le remplacer à chaque
+        // rafraîchissement obligeait à libérer l'ancien, et le libérer depuis le
+        // gestionnaire de clic d'un de ses items détruisait l'objet que WinForms
+        // était encore en train d'utiliser pour refermer le menu.
+        // Seuls les items sont recréés : le conteneur, lui, ne bouge jamais.
+        readonly ContextMenuStrip menu = new ContextMenuStrip();
         readonly List<string> journal = new List<string>();
         readonly object verrou = new object();
 
@@ -305,6 +312,7 @@ namespace Recast
                 Visible = true
             };
             icone.MouseClick += (s, e) => { if (e.Button == MouseButtons.Left) OuvrirMenu(); };
+            icone.ContextMenuStrip = menu;   // attaché une fois pour toutes
 
             ConstruireMenu();
             DemarrerNode();
@@ -575,19 +583,24 @@ namespace Recast
             if (mi != null) mi.Invoke(icone, null);
         }
 
+        // Toujours différé au tour de boucle suivant. Reconstruire le menu depuis le
+        // gestionnaire de clic d'un de ses items revient à le modifier pendant que
+        // WinForms s'en sert encore — c'est ce qui provoquait une
+        // ObjectDisposedException au retour du clic.
         void Rafraichir()
         {
-            if (icone.ContextMenuStrip != null && icone.ContextMenuStrip.InvokeRequired)
-            {
-                icone.ContextMenuStrip.BeginInvoke((Action)ConstruireMenu);
-                return;
-            }
-            ConstruireMenu();
+            if (ui != null) ui.Post(_ => ConstruireMenu(), null);
+            else ConstruireMenu();
         }
 
         void ConstruireMenu()
         {
-            var menu = new ContextMenuStrip();
+            // Libérer les items précédents, jamais le conteneur
+            var anciens = new ToolStripItem[menu.Items.Count];
+            menu.Items.CopyTo(anciens, 0);
+            menu.Items.Clear();
+            foreach (var it in anciens) { try { it.Dispose(); } catch { } }
+
             bool actif = adresse != null;
 
             // Statut
@@ -671,19 +684,6 @@ namespace Recast
             var quitter = new ToolStripMenuItem("Quitter");
             quitter.Click += (s, e) => Quitter();
             menu.Items.Add(quitter);
-
-            // Libérer l'ancien menu : sans ça chaque rafraîchissement en abandonnait
-            // un complet, avec ses items et leurs handles. Sur une app qui tourne
-            // des jours, la fuite est loin d'être théorique.
-            var precedent = icone.ContextMenuStrip;
-            icone.ContextMenuStrip = menu;
-            if (precedent != null)
-            {
-                // Un menu ouvert au moment du rafraîchissement ne doit pas être
-                // détruit sous les doigts de l'utilisateur : on attend sa fermeture.
-                if (precedent.Visible) precedent.Closed += (s, e) => precedent.Dispose();
-                else precedent.Dispose();
-            }
 
             icone.Text = !string.IsNullOrEmpty(lectureNom)
                 ? Tronquer("re:cast — " + lectureNom, 63)
