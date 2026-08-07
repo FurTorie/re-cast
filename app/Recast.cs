@@ -133,6 +133,45 @@ namespace Recast
             return ligne.Contains("\\daemon\\index.js")
                 && (ligne.Contains("re-cast") || ligne.Contains("re cast") || ligne.Contains("recast"));
         }
+
+        static int Parent(int pid)
+        {
+            try
+            {
+                using (var chercheur = new System.Management.ManagementObjectSearcher(
+                    "SELECT ParentProcessId FROM Win32_Process WHERE ProcessId = " + pid))
+                using (var resultats = chercheur.Get())
+                {
+                    foreach (System.Management.ManagementObject o in resultats)
+                    {
+                        var v = o["ParentProcessId"];
+                        if (v != null) return Convert.ToInt32(v);
+                    }
+                }
+            }
+            catch { }
+            return 0;
+        }
+
+        // VRAI orphelin : un daemon re:cast dont le processus parent n'existe plus.
+        // La distinction est essentielle. Un daemon lance a la main depuis un
+        // terminal a un parent bien vivant : le tuer en silence serait hostile,
+        // c'est un choix delibere de l'utilisateur. Seul celui dont le parent a
+        // disparu — typiquement notre app tuee de force — est a remplacer.
+        public static bool EstOrphelin(int pid)
+        {
+            if (!EstNotreDaemon(pid)) return false;
+
+            int parent = Parent(pid);
+            if (parent == 0) return true;
+
+            try
+            {
+                var p = Process.GetProcessById(parent);
+                return p.HasExited;
+            }
+            catch { return true; }   // parent introuvable donc disparu
+        }
     }
 
     // ─── Mémoire ──────────────────────────────────────────────────────────────
@@ -312,6 +351,14 @@ namespace Recast
         DateTime nodeDemarreA;   // pour distinguer « démarre » de « arrêté »
         string dernierEtat = ""; // évite de reconstruire le menu à chaque sondage
 
+        // « Le serveur répond » et « c'est le nôtre qui répond » sont deux choses
+        // différentes : quand un autre programme tient le port, /status répond
+        // parfaitement et l'app croyait à tort que tout allait bien.
+        bool NotreDaemonTourne
+        {
+            get { return node != null && !node.HasExited; }
+        }
+
         // Le daemon met quelques secondes à écouter. Sans cet état, le menu affichait
         // « Serveur arrêté » pendant tout ce temps, ce qui est faux et inquiétant.
         bool DemarrageEnCours
@@ -319,7 +366,7 @@ namespace Recast
             get
             {
                 return adresse == null
-                    && node != null && !node.HasExited
+                    && NotreDaemonTourne
                     && (DateTime.Now - nodeDemarreA).TotalSeconds < 30;
             }
         }
@@ -422,12 +469,13 @@ namespace Recast
                 return;
             }
 
-            // Un daemon re:cast orphelin garde le port : cas courant apres un arret
-            // force, l'enfant node survivant a son parent. Comme il est indubitablement
-            // le notre, on le remplace sans rien demander. Tout autre processus, en
-            // revanche, ne sera jamais tue sans confirmation explicite.
+            // Un daemon re:cast ORPHELIN — parent disparu — garde le port : cas
+            // courant apres un arret force. Celui-la, on le remplace sans rien
+            // demander. En revanche un daemon lance a la main depuis un terminal a
+            // un parent vivant : c'est un choix delibere, on n'y touche pas et le
+            // menu proposera de liberer le port.
             int occupant = Port.Occupant(PORT);
-            if (occupant != 0 && Port.EstNotreDaemon(occupant))
+            if (occupant != 0 && Port.EstOrphelin(occupant))
             {
                 try
                 {
@@ -526,6 +574,10 @@ namespace Recast
             {
                 if (adresse != null) { adresse = null; Rafraichir(); }
 
+                // Personne ne répond : le port est-il malgré tout retenu ? netstat
+                // n'est appelé que dans ce cas rare, jamais en fonctionnement normal.
+                if (!NotreDaemonTourne) portOccupe = Port.Occupant(PORT) != 0;
+
                 // Pendant le démarrage on sonde vite ; une fois la fenêtre écoulée,
                 // inutile d'interroger un serveur manifestement absent chaque seconde.
                 sondage.Interval = DemarrageEnCours ? 1000 : SONDAGE_REPOS;
@@ -533,15 +585,29 @@ namespace Recast
                 return;
             }
 
+            // Quelqu'un répond. Si ce n'est pas notre processus, c'est qu'un autre
+            // programme tient le port — il faut proposer de le libérer, pas afficher
+            // « serveur actif » comme si tout allait bien.
+            portOccupe = !NotreDaemonTourne;
+
             // Le corps est produit par notre propre serveur : une extraction ciblée
             // suffit et évite d'embarquer un analyseur JSON.
             string nom   = Extraire(reponse, "\"deviceName\"\\s*:\\s*\"([^\"]*)\"");
             string proto = Extraire(reponse, "\"protocole\"\\s*:\\s*\"([^\"]*)\"");
+            string ip    = Extraire(reponse, "\"ip\"\\s*:\\s*\"([^\"]*)\"");
 
-            bool change = (nom != lectureNom) || (proto != lectureProto) || (adresse == null);
+            // L'adresse vient désormais du serveur lui-même. Avant, on la relisait
+            // dans les logs et on retombait sur « localhost » quand ils n'étaient pas
+            // les nôtres — adresse inutilisable depuis le téléphone.
+            string nouvelleAdresse = !string.IsNullOrEmpty(ip)
+                ? ip + ":" + PORT
+                : (LireAdresseDuJournal() ?? adresse);
+
+            bool change = (nom != lectureNom) || (proto != lectureProto)
+                       || (nouvelleAdresse != adresse);
             lectureNom = nom;
             lectureProto = proto;
-            if (adresse == null) adresse = LireAdresseDuJournal() ?? ("localhost:" + PORT);
+            adresse = nouvelleAdresse;
 
             // Cadence adaptée : rapide pendant une lecture, lente au repos
             int voulu = string.IsNullOrEmpty(lectureNom) ? SONDAGE_REPOS : SONDAGE_LECTURE;
@@ -554,7 +620,10 @@ namespace Recast
         // c'est un simple délai qui s'écoule. On surveille donc l'état calculé.
         void SignalerChangementEtat()
         {
-            string etat = DemarrageEnCours ? "demarrage" : (adresse != null ? "actif" : "arrete");
+            string etat = DemarrageEnCours ? "demarrage"
+                        : adresse != null   ? (NotreDaemonTourne ? "actif" : "usurpe")
+                        : portOccupe        ? "occupe"
+                                            : "arrete";
             if (etat == dernierEtat) return;
             dernierEtat = etat;
             Rafraichir();
@@ -658,11 +727,15 @@ namespace Recast
 
             bool actif = adresse != null;
 
+            bool notreDaemon = NotreDaemonTourne;
+
             // Statut
-            menu.Items.Add(Inerte(redemarrage           ? "⏳  Redémarrage…"
-                                 : actif                ? "●  Serveur actif"
-                                 : DemarrageEnCours     ? "⏳  Démarrage du serveur…"
-                                                        : "○  Serveur arrêté"));
+            menu.Items.Add(Inerte(
+                  redemarrage                  ? "⏳  Redémarrage…"
+                : actif && notreDaemon         ? "●  Serveur actif"
+                : actif && !notreDaemon        ? "⚠  Port " + PORT + " tenu par un autre programme"
+                : DemarrageEnCours             ? "⏳  Démarrage du serveur…"
+                                               : "○  Serveur arrêté"));
 
             if (actif)
             {
@@ -691,9 +764,11 @@ namespace Recast
 
             menu.Items.Add(new ToolStripSeparator());
 
-            // Conflit de port : proposer le déblocage, avec le nom du processus
-            // fautif. Sans ça l'app reste inerte sans que rien n'explique pourquoi.
-            if (portOccupe && !actif)
+            // Conflit de port : proposer le déblocage dès que ce n'est pas NOTRE
+            // daemon qui occupe la place. Le test portait avant sur « le serveur ne
+            // répond pas », donc le bouton n'apparaissait jamais quand un autre
+            // programme répondait à sa place — précisément le cas à traiter.
+            if (portOccupe && !notreDaemon)
             {
                 var forcer = new ToolStripMenuItem("⚠  Libérer le port " + PORT + " et démarrer");
                 forcer.Font = new Font(forcer.Font, FontStyle.Bold);

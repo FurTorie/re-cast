@@ -8,6 +8,7 @@ const dlna = require('./cast/dlna');
 const airplay = require('./cast/airplay');
 const { proxyHandler, streamHandler } = require('./proxy');
 const state = require('./state');
+const discovery = require('./discovery');
 
 const app = express();
 
@@ -68,8 +69,19 @@ app.use(cors({
 app.use(express.json());
 
 // GET /status - vérifier que le daemon tourne, et ce qu'il diffuse
+// `ip` évite à l'app de bureau de deviner l'adresse LAN en relisant les logs :
+// c'est celle à saisir dans l'extension, et elle n'apparaissait nulle part ailleurs.
 app.get('/status', (req, res) => {
-  res.json({ status: 'ok', version: '0.1.0', lecture: state.courant() });
+  res.json({
+    // `app` sert de signature : l'app de bureau s'en sert pour reconnaître un
+    // daemon re:cast lancé en dehors d'elle, et le traiter comme fonctionnel
+    // plutôt que comme un programme tiers qui squatte le port.
+    app:     're:cast',
+    status:  'ok',
+    version: '0.1.0',
+    ip:      discovery.localIpFor(),
+    lecture: state.courant()
+  });
 });
 
 // GET /devices - lister les appareils

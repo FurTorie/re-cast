@@ -53,12 +53,18 @@ L'installation se fait en `/SILENT` et l'app se relance seule — d'où l'absenc
 
 Un mutex nommé empêche un second lancement : deux apps démarreraient deux daemons qui se disputeraient le port 7171, et la seconde resterait inerte sans rien expliquer.
 
-Reste le cas où le port est pris malgré tout. **Un daemon tué de force laisse son enfant `node` vivant** — c'est le cas le plus fréquent, après un arrêt brutal ou une désinstallation. L'app distingue alors deux situations, et la nuance est délibérée :
+Reste le cas où le port est pris malgré tout. **Un daemon tué de force laisse son enfant `node` vivant** — c'est le cas le plus fréquent, après un arrêt brutal ou une désinstallation.
 
-- **Un daemon re:cast orphelin** est reconnu à sa ligne de commande (lue via WMI, seul moyen pour un autre processus) et **remplacé sans rien demander** : il est indubitablement le nôtre.
-- **Tout autre processus** n'est jamais tué en silence. Le menu propose « ⚠ Libérer le port 7171 et démarrer », et la confirmation affiche le nom du processus *et sa ligne de commande*, pour que la décision soit informée.
+La distinction qui compte n'est pas « est-ce un daemon re:cast » mais **« son processus parent existe-t-il encore »** :
 
-Se fier au seul nom `node` serait une erreur : d'autres logiciels tournent sous Node.
+- **Parent disparu** → vrai orphelin, typiquement notre app tuée de force. Remplacé sans rien demander.
+- **Parent vivant** → daemon lancé délibérément depuis un terminal. On n'y touche pas : le tuer en silence irait contre une décision explicite de l'utilisateur. Le menu propose « ⚠ Libérer le port 7171 et démarrer », et la confirmation affiche le nom du processus *et sa ligne de commande*.
+
+Se fier au seul nom `node` serait une erreur : d'autres logiciels tournent sous Node. La ligne de commande et le parent se lisent via WMI, seul moyen de les obtenir pour un autre processus.
+
+**Le bouton s'affiche dès que le serveur en place n'est pas le processus fils de l'app**, jamais sur « le serveur ne répond pas ». C'est une correction : le test portait d'abord sur l'absence de réponse, si bien que le bouton apparaissait une seconde puis disparaissait dès qu'un daemon étranger répondait à `/status` — exactement le cas qu'il devait traiter.
+
+`GET /status` renvoie `app: "re:cast"` et l'`ip` LAN du serveur. L'app n'a donc plus à deviner l'adresse en relisant les logs, ce qui la faisait retomber sur `localhost` — une adresse inutilisable depuis le téléphone.
 
 **Depuis les sources :**
 
