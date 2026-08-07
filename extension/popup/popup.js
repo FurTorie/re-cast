@@ -147,6 +147,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   saved      = Array.isArray(stored.savedDevices) ? stored.savedDevices : [];
   selectedId = stored.lastDeviceId || null;
   chargerServeurs(stored);
+  await rattacherAppareilsAnciens();
 
   brancherEvenements();
 
@@ -383,6 +384,10 @@ function sousReseaux() {
     if (m) ajouterPrefixe(m[1]);
   };
 
+  // `saved` en entier, sans filtrer sur le serveur actif — contrairement à
+  // l'affichage. Ici on cherche un daemon, n'importe lequel : une TV enregistrée
+  // sous un autre serveur désigne justement un réseau qu'on fréquente, et c'est
+  // exactement l'indice qui manque quand celui d'aujourd'hui ne répond pas.
   saved.forEach(d => depuisIp(d.host));
   serveurs.forEach(s => depuisIp((s.url.match(/(\d{1,3}(?:\.\d{1,3}){3})/) || [])[1]));
   ['192.168.1', '192.168.0', '10.0.0', '192.168.2'].forEach(ajouterPrefixe);
@@ -527,7 +532,13 @@ async function oublierServeur(s) {
   serveurs = serveurs.filter(x => x.id !== s.id);
   if (serveurActifId === s.id) serveurActifId = serveurs[0]?.id || null;
   if (editServeurId === s.id) editServeurId = null;
-  await persisterServeurs();
+
+  // Ses appareils partent avec lui. Rattachés à un serveur qui n'existe plus,
+  // ils n'auraient plus aucun moyen de réapparaître : ils grossiraient le
+  // stockage à jamais sans jamais s'afficher.
+  saved = saved.filter(d => d.serverId !== s.id);
+
+  await Promise.all([persisterServeurs(), persisterAppareils()]);
   rendre();
 }
 
@@ -554,12 +565,38 @@ async function renommerServeur(s, valeur) {
 
 // ─── Appareils : persistance locale ───────────────────────────────────────────
 
+// Un appareil enregistré appartient AU SERVEUR QUI L'A VU, jamais à l'extension
+// en général. Deux daemons sur un même réseau voient les mêmes TV, parfois sous
+// des adresses différentes — l'un via le Wi-Fi, l'autre via un partage de
+// connexion. Une liste commune affichait alors les deux jeux d'entrées empilés,
+// et la même TV apparaissait plusieurs fois sans qu'on puisse démêler laquelle
+// venait d'où. Toutes les lectures de `saved` passent donc par ces deux
+// fonctions ; y accéder directement réintroduirait le mélange.
+function appareilsDuServeur() {
+  return saved.filter(d => d.serverId === serveurActifId);
+}
+
+function trouverEnregistre(id) {
+  return saved.find(d => d.id === id && d.serverId === serveurActifId);
+}
+
+// Reprise des installations d'avant le multi-serveurs : ces entrées n'ont pas de
+// serverId. Elles sont rattachées au serveur actif au chargement — c'est bien
+// celui sous lequel elles ont été enregistrées, puisqu'il n'y en avait qu'un.
+async function rattacherAppareilsAnciens() {
+  let change = false;
+  saved.forEach(d => {
+    if (!d.serverId) { d.serverId = serveurActifId; change = true; }
+  });
+  if (change) await persisterAppareils();
+}
+
 function persisterAppareils() {
   return browser.storage.local.set({ savedDevices: saved });
 }
 
 function estEnregistre(id) {
-  return saved.some(d => d.id === id);
+  return !!trouverEnregistre(id);
 }
 
 function enregistrer(device) {
@@ -568,14 +605,15 @@ function enregistrer(device) {
     id:   device.id,
     name: device.name,   // nom réseau, resynchronisé à chaque rafraîchissement
     type: device.type,
-    host: device.host
+    host: device.host,
+    serverId: serveurActifId
     // nickname : ajouté seulement si l'utilisateur en définit un
   }];
 }
 
 async function basculerEnregistrement(device) {
   if (estEnregistre(device.id)) {
-    saved = saved.filter(d => d.id !== device.id);
+    saved = saved.filter(d => !(d.id === device.id && d.serverId === serveurActifId));
     if (editingId === device.id) editingId = null;
   } else {
     enregistrer(device);
@@ -596,7 +634,7 @@ async function renommerAppareil(id, valeur) {
   const vu = appareilsFusionnes().find(d => d.id === id);
   if (vu && !estEnregistre(id)) enregistrer(vu);
 
-  const device = saved.find(d => d.id === id);
+  const device = trouverEnregistre(id);
   if (device) {
     const nickname = valeur.trim();
     if (nickname && nickname !== device.name) device.nickname = nickname;
@@ -609,7 +647,7 @@ async function renommerAppareil(id, valeur) {
 }
 
 async function oublierAppareil(id) {
-  saved = saved.filter(d => d.id !== id);
+  saved = saved.filter(d => !(d.id === id && d.serverId === serveurActifId));
   if (selectedId === id) selectedId = null;
   editingId = null;
   await persisterAppareils();
@@ -632,7 +670,7 @@ async function rafraichirAppareils({ scan }) {
     // `name`, jamais `nickname` — sinon le surnom choisi serait écrasé à chaque scan.
     let change = false;
     live.forEach(d => {
-      const s = saved.find(x => x.id === d.id);
+      const s = trouverEnregistre(d.id);
       if (s && d.name && s.name !== d.name) { s.name = d.name; change = true; }
     });
     if (change) await persisterAppareils();
@@ -673,9 +711,11 @@ async function onRechercher() {
 }
 
 // Fusion enregistrés + détectés, sans doublon. Les enregistrés passent en premier.
+// Les enregistrés sont ceux DU SERVEUR ACTIF : `live` ne vient que de lui, mêler
+// les deux sources reviendrait à comparer des appareils vus depuis deux réseaux.
 function appareilsFusionnes() {
   const parId = new Map();
-  saved.forEach(d => parId.set(d.id, { ...d, saved: true, live: false }));
+  appareilsDuServeur().forEach(d => parId.set(d.id, { ...d, saved: true, live: false }));
   live.forEach(d => {
     const existant = parId.get(d.id);
     if (existant) existant.live = true;

@@ -330,6 +330,12 @@ L'affichage prend `nom || nomReseau || hôte de l'URL`.
 
 **La bascule automatique** (`connecter()`, à l'ouverture du popup) : le serveur actif d'abord ; s'il ne répond pas, tous les autres **en parallèle** — les sonder en série ferait payer un délai d'attente par serveur, alors qu'ils sont tous injoignables en même temps quand on change de réseau ; on retient le premier de la **liste** qui répond, pas le plus rapide, parce que l'ordre de la liste est celui que l'utilisateur a choisi. En dernier recours seulement, le balayage réseau.
 
+**Un appareil enregistré appartient au serveur qui l'a vu**, via un champ `serverId` dans `savedDevices`. Ce n'est pas du rangement : deux daemons sur un même réseau voient les mêmes TV, parfois sous des **adresses différentes** — l'un par le Wi-Fi, l'autre par un partage de connexion Windows, dont le sous-réseau `192.168.137.0/24` est fixe. Comme l'ID d'appareil est bâti sur l'IP (`dlna-192-168-1-13`), la même TV donne alors deux entrées. Une liste commune les empilait toutes, sans moyen de savoir laquelle venait d'où.
+
+Toutes les lectures passent donc par `appareilsDuServeur()` et `trouverEnregistre()` — lire `saved` directement réintroduit le mélange. Deux exceptions volontaires : `sousReseaux()`, qui veut au contraire **toutes** les IP connues puisqu'il cherche un daemon, n'importe lequel ; et `oublierServeur()`, qui emporte les appareils du serveur supprimé — rattachés à un serveur disparu, ils ne pourraient plus jamais réapparaître.
+
+Reste un doublon que ce découpage ne traite pas : **un seul daemon peut voir la même TV sur deux de ses interfaces** et la mettre deux fois en cache, sous deux IP. L'identité stable existe pourtant dans les réponses (le `target` `.local` du SRV mDNS côté Chromecast, l'`UDN` UPnP côté DLNA) ; elle n'est pas encore exploitée.
+
 `daemonUrl`, l'ancienne clé, n'est plus **écrite** : son seul autre lecteur était le panneau injecté, supprimé depuis. Elle est encore **lue une fois**, dans `chargerServeurs()`, quand `servers` est absent — c'est la reprise des installations antérieures, et rien d'autre. Ne pas la remettre à jour « au cas où » : une clé écrite que personne ne lit finit par diverger sans que rien ne le signale.
 
 **Détection automatique.** `detecterDaemon()` sonde des adresses candidates et n'en retient une que si `GET /status` répond `app: "re:cast"`. Un simple HTTP 200 ne suffit pas : n'importe quel appareil peut écouter sur 7171. Ordre : adresses directes (toutes celles de la liste, `localhost`, `127.0.0.1`), puis balayage de `/24`.
