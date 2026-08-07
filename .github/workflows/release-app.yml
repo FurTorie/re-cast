@@ -46,6 +46,26 @@ jobs:
             echo "publier=oui" >> "$GITHUB_OUTPUT"
           fi
 
+      # L'app embarque le daemon : une correction du daemon qui ne s'accompagne
+      # pas d'un bump de app/version.txt n'atteint jamais les installations.
+      - name: Version oubliée ?
+        if: steps.check.outputs.publier == 'non' && github.event_name == 'push'
+        shell: bash
+        run: |
+          AVANT="${{ github.event.before }}"
+          if [ -z "$AVANT" ] || [ "$AVANT" = "0000000000000000000000000000000000000000" ]; then
+            echo "::notice::Pas de base de comparaison — contrôle ignoré."
+            exit 0
+          fi
+          MODIF=$(git diff --name-only "$AVANT" "${{ github.sha }}" -- app/ daemon/ | grep -v '^app/version\.txt$' || true)
+          if [ -n "$MODIF" ]; then
+            echo "::error::L'app ou le daemon qu'elle embarque ont changé, mais app/version.txt reste ${{ steps.v.outputs.version }}, déjà publiée."
+            echo "Fichiers modifiés :"
+            echo "$MODIF" | sed 's/^/  /'
+            exit 1
+          fi
+          echo "Aucun fichier concerné modifié — rien à publier."
+
       - uses: actions/setup-node@v4
         if: steps.check.outputs.publier == 'oui'
         with:

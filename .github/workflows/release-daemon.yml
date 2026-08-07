@@ -43,6 +43,27 @@ jobs:
             echo "publier=oui" >> "$GITHUB_OUTPUT"
           fi
 
+      # Sans ce garde-fou, modifier le daemon en oubliant sa version passait
+      # totalement inaperçu : le workflow se contentait de dire « déjà publiée »
+      # et le correctif n'atteignait jamais la release. C'est arrivé trois fois.
+      - name: Version oubliée ?
+        if: steps.check.outputs.publier == 'non' && github.event_name == 'push'
+        shell: bash
+        run: |
+          AVANT="${{ github.event.before }}"
+          if [ -z "$AVANT" ] || [ "$AVANT" = "0000000000000000000000000000000000000000" ]; then
+            echo "::notice::Pas de base de comparaison — contrôle ignoré."
+            exit 0
+          fi
+          MODIF=$(git diff --name-only "$AVANT" "${{ github.sha }}" -- daemon/ | grep -v '^daemon/package\.json$' || true)
+          if [ -n "$MODIF" ]; then
+            echo "::error::Le daemon a changé mais sa version reste ${{ steps.v.outputs.version }}, déjà publiée. Incrémenter daemon/package.json."
+            echo "Fichiers modifiés :"
+            echo "$MODIF" | sed 's/^/  /'
+            exit 1
+          fi
+          echo "Aucun fichier du daemon modifié — rien à publier."
+
       - name: Installer les dépendances
         if: steps.check.outputs.publier == 'oui'
         working-directory: daemon

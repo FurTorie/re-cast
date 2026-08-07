@@ -169,7 +169,11 @@ Les deux moitiés se versionnent séparément, et chacune déclenche sa propre p
 | `daemon/package.json` → `version` | archive du daemon en release GitHub |
 | `app/version.txt` | compilation, installateur Inno Setup, release GitHub du `.exe` |
 
-Rien ne part tant que le numéro de version n'a pas changé : un tag `extension-vX.Y.Z` ou `daemon-vX.Y.Z` marque ce qui est déjà publié. Republier une version déjà connue d'AMO échouerait de toute façon côté Mozilla.
+Rien ne part tant que le numéro de version n'a pas changé : un tag `extension-vX.Y.Z`, `daemon-vX.Y.Z` ou `app-vX.Y.Z` marque ce qui est déjà publié. Republier une version déjà connue d'AMO échouerait de toute façon côté Mozilla.
+
+**Et l'oubli du bump fait échouer la CI.** Si un push modifie des fichiers d'une moitié sans incrémenter sa version, le workflow s'arrête en erreur au lieu de dire « déjà publiée » et de laisser passer. C'est arrivé trois fois sur le daemon avant que ce contrôle n'existe : les correctifs n'atteignaient jamais la release standalone.
+
+Le workflow de l'app surveille aussi `daemon/**`, puisque l'installateur embarque le daemon : corriger le daemon oblige donc à bumper **les deux** versions.
 
 Le lancement manuel fait exactement la même chose, si besoin :
 
