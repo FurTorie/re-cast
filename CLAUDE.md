@@ -2,6 +2,34 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Mémoire du projet
+
+Elle est **versionnée dans le dépôt**, sous `.claude/memory/`, et non dans le dossier de mémoire local de Claude Code. Ce dernier est indexé sur le chemin du dossier : re-cloner le dépôt ailleurs — via GitHub Desktop par exemple — repartirait d'une mémoire vide. Ici elle suit le code.
+
+@.claude/memory/recast-cible-android.md
+@.claude/memory/recast-etat-valide.md
+@.claude/memory/nettoyer-residus-shell.md
+
+Si ces imports ne sont pas résolus automatiquement, lire ces trois fichiers avant de commencer.
+
+**En cas de contradiction, ce fichier-ci fait foi** : il est relu à chaque modification du code, là où une note de mémoire peut dater. C'est déjà arrivé — une note affirmait que le bouton flottant était l'interface principale sur mobile, alors que c'est le popup.
+
+**Écrire en français**, y compris les réponses à l'utilisateur, les commentaires et les messages de commit.
+
+### Avant tout commit
+
+Vérifier qu'aucun fichier vide n'a été créé par une redirection shell malheureuse :
+
+```bash
+find . -type f -empty -not -path "./.git/*" -not -path "*/node_modules/*"
+```
+
+Un hook les refuse, mais il faut l'activer une fois par clone :
+
+```bash
+git config core.hooksPath .githooks
+```
+
 ## Présentation
 
 **re:cast** — caster une vidéo depuis Firefox vers une TV en résolution native. Deux moitiés indépendantes qui communiquent en HTTP :

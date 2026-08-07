@@ -1,0 +1,35 @@
+#!/bin/sh
+# Refuse tout commit qui introduirait un fichier vide.
+#
+# Ce n'est pas une coquetterie. Une redirection shell malheureuse — un `>` mal
+# placé, un heredoc qui se termine mal, un argument pris pour un nom de fichier —
+# crée un fichier de 0 octet au nom absurde. `git add -A` l'emporte ensuite sans
+# rien signaler, et il finit poussé. C'est arrivé plus de trente fois sur ce
+# dépôt, dont un fichier nommé « 0 » resté sur origin/main.
+#
+# Un fichier vide n'est presque jamais volontaire. Quand il l'est (un .gitkeep),
+# `git commit --no-verify` passe outre.
+
+# --diff-filter=d exclut les suppressions, et RIEN d'autre. Un filtre `AM`
+# paraissait suffire mais laissait passer les RENOMMAGES : deux fichiers vides
+# ayant un contenu identique, git voit un `R` et non un `A` dès qu'un autre
+# fichier vide disparaît dans le même commit. Le premier essai est ainsi passé
+# au travers. Le test `-f` écarte de lui-même ce qui n'existe plus.
+vides=$(git diff --cached --name-only --diff-filter=d | while read -r f; do
+  if [ -f "$f" ] && [ ! -s "$f" ]; then printf '%s\n' "$f"; fi
+done)
+
+if [ -n "$vides" ]; then
+  echo ""
+  echo "  Commit refusé : fichier(s) vide(s) dans l'index."
+  echo ""
+  printf '%s\n' "$vides" | sed 's/^/      /'
+  echo ""
+  echo "  Ce sont presque toujours des résidus de redirection shell."
+  echo ""
+  echo "      git rm --cached <fichier> && rm <fichier>"
+  echo ""
+  echo "  Si le fichier vide est voulu :  git commit --no-verify"
+  echo ""
+  exit 1
+fi
