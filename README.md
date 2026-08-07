@@ -40,7 +40,9 @@ Plutôt que de garder un terminal ouvert, l'app place une icône dans la zone de
 
 **Installation :** télécharger `recast-setup-X.Y.Z.exe` depuis les [releases](../../releases) et l'exécuter. Aucun droit administrateur n'est demandé. L'installateur contient l'app **et** le daemon avec ses dépendances — seul Node.js doit être présent sur la machine, ce qu'il vérifie et signale.
 
-**Mise à jour automatique.** L'app consulte [`app-latest.json`](app-latest.json) 30 s après son démarrage puis toutes les 6 h. Quand une version plus récente existe, elle apparaît en gras dans le menu et une bulle le signale ; un clic télécharge et installe.
+**Mise à jour automatique.** L'app consulte [`app-latest.json`](app-latest.json) 30 s après son démarrage puis toutes les 6 h, et à la demande via « Vérifier les mises à jour ». Quand une version plus récente existe, elle apparaît en gras dans le menu et une bulle le signale ; un clic télécharge et installe.
+
+> **Le manifeste se lit via l'API GitHub, pas via `raw.githubusercontent.com`.** Ce dernier sert ses fichiers derrière un CDN avec `Cache-Control: max-age=300` : pendant cinq minutes après une publication, il renvoie encore l'ancienne version, et une vérification manuelle répondait « re:cast est à jour » alors qu'une mise à jour venait de sortir. Ajouter un paramètre anti-cache à l'URL n'y change rien — le cache est partagé, pas local. L'API plafonne à 60 s, honore `Cache-Control: no-cache`, et renvoie le fichier brut avec l'en-tête `Accept: application/vnd.github.raw`. Sa limite de 60 requêtes par heure est sans risque : quatre vérifications automatiques par jour.
 
 Télécharger puis exécuter un `.exe` mérite des garde-fous, il y en a deux et ils ne sont pas négociables :
 

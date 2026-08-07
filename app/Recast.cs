@@ -213,7 +213,18 @@ namespace Recast
 
     static class MiseAJour
     {
-        const string MANIFESTE = "https://raw.githubusercontent.com/FurTorie/re-cast/main/app-latest.json";
+        // On interroge l'API GitHub, pas raw.githubusercontent.com.
+        //
+        // raw sert ses fichiers derriere un CDN avec Cache-Control: max-age=300 :
+        // pendant cinq minutes apres une publication, il renvoie encore l'ancienne
+        // version, et une verification manuelle repondait « a jour » alors qu'une
+        // mise a jour venait de sortir. Un parametre anti-cache n'y change rien,
+        // le cache est partage, pas local.
+        //
+        // L'API, elle, plafonne a 60 s et honore la revalidation. Sa limite de
+        // 60 requetes par heure est sans risque ici : quatre verifications
+        // automatiques par jour, plus les clics occasionnels.
+        const string MANIFESTE = "https://api.github.com/repos/FurTorie/re-cast/contents/app-latest.json";
         const string PREFIXE_AUTORISE = "https://github.com/FurTorie/re-cast/releases/download/";
 
         public class Info
@@ -238,8 +249,13 @@ namespace Recast
                 using (var wc = new WebClient())
                 {
                     wc.Encoding = Encoding.UTF8;
+                    // User-Agent obligatoire sur l'API GitHub
                     wc.Headers.Add("User-Agent", "recast-app");
-                    json = wc.DownloadString(MANIFESTE + "?t=" + DateTime.UtcNow.Ticks);
+                    // Sans cet Accept, l'API renvoie une enveloppe JSON avec le
+                    // contenu encode en base64 ; avec, on recoit le fichier tel quel.
+                    wc.Headers.Add("Accept", "application/vnd.github.raw");
+                    wc.Headers.Add("Cache-Control", "no-cache");
+                    json = wc.DownloadString(MANIFESTE);
                 }
 
                 string v   = Champ(json, "version");
