@@ -84,7 +84,7 @@ function registerStream(streamUrl, referer, {
     .update(`${streamUrl}|${referer || ''}|${mode}`)
     .digest('hex')
     .slice(0, 12);
-  streamStore[id] = { url: streamUrl, referer, mode };
+  streamStore[id] = { url: streamUrl, referer, mode, segment };
   const ip = localIp || discovery.localIpFor(target);
   // .mp4 à la fin en mode Samsung : la TV lit l'extension pour deviner le type
   // Le suffixe .mp4 ne sert QUE sur l'URL de tête, celle remise à la TV par
@@ -141,7 +141,7 @@ function streamHandler(req, res) {
     return;
   }
 
-  fetchAndProxy(entry.url, entry.referer, req, res, entry.mode || 'samsung');
+  fetchAndProxy(entry.url, entry.referer, req, res, entry.mode || 'samsung', 0, !!entry.segment);
 }
 
 // Handler pour /proxy?url=... (fallback rétrocompatibilité)
@@ -158,7 +158,7 @@ const TRANSIENT = ['ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'ETIMEDOUT', 'EAI_AGAI
 const MAX_ATTEMPTS = 3;
 
 // Proxy d'une URL vers le client
-function fetchAndProxy(target, referer, req, res, mode = 'samsung', attempt = 0) {
+function fetchAndProxy(target, referer, req, res, mode = 'samsung', attempt = 0, estSegment = false) {
   console.log(`[re:cast] Proxy fetch (${mode}): ${target.substring(0, 80)}`);
 
   const parsed  = url.parse(target);
@@ -224,7 +224,7 @@ function fetchAndProxy(target, referer, req, res, mode = 'samsung', attempt = 0)
       const loc = proxyRes.headers.location.startsWith('http')
         ? proxyRes.headers.location
         : `${parsed.protocol}//${parsed.host}${proxyRes.headers.location}`;
-      return fetchAndProxy(loc, referer, req, res, mode);
+      return fetchAndProxy(loc, referer, req, res, mode, 0, estSegment);
     }
 
     // pipe() ne propage PAS les erreurs vers la destination : sans ces handlers, un
@@ -284,8 +284,15 @@ function fetchAndProxy(target, referer, req, res, mode = 'samsung', attempt = 0)
           // gérer : la TV tentait un saut, on renvoyait le flux depuis le début, et
           // elle rechargeait tout. Accept-Ranges + relais du Range le rendent vrai.
           'Accept-Ranges':               proxyRes.headers['accept-ranges'] || 'bytes',
-          'transferMode.dlna.org':       'Streaming',
-          'contentFeatures.dlna.org':    'DLNA.ORG_PN=AVC_MP4_MP_SD_AAC_MULT5;DLNA.ORG_OP=01;DLNA.ORG_FLAGS=01500000000000000000000000000000'
+
+          // Les en-têtes DLNA décrivent LA ressource désignée à la TV, pas ses
+          // morceaux internes. Les envoyer sur un segment annonçait un profil
+          // DLNA.ORG_PN=AVC_MP4_… sur une réponse video/mp2t : la TV lisait le
+          // profil MP4, recevait du TS, et refermait dès le premier segment.
+          ...(estSegment ? {} : {
+            'transferMode.dlna.org':    'Streaming',
+            'contentFeatures.dlna.org': 'DLNA.ORG_PN=AVC_MP4_MP_SD_AAC_MULT5;DLNA.ORG_OP=01;DLNA.ORG_FLAGS=01500000000000000000000000000000'
+          })
         };
 
     // Une réponse partielle doit conserver son statut 206 et sa plage, sinon le
@@ -361,7 +368,7 @@ function fetchAndProxy(target, referer, req, res, mode = 'samsung', attempt = 0)
 
     if (transient && attempt < MAX_ATTEMPTS - 1 && !res.headersSent) {
       console.warn(`[re:cast] Échec transitoire (${err.code || err.message}), tentative ${attempt + 2}/${MAX_ATTEMPTS}`);
-      return fetchAndProxy(target, referer, req, res, mode, attempt + 1);
+      return fetchAndProxy(target, referer, req, res, mode, attempt + 1, estSegment);
     }
 
     console.error('[re:cast] Proxy error:', err.message);

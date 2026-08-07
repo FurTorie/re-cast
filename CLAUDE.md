@@ -190,7 +190,17 @@ Piège à ne pas réintroduire : `server.js` exporte l'**app Express**, pas le s
    **Les segments, eux, gardent leur vraie extension** (`.ts`). Leur coller `.mp4` alors que le `Content-Type` annonce `video/mp2t` créait une contradiction entre l'URL et l'en-tête, et la TV abandonnait après avoir réclamé `seg-1`. Symptôme identique au point 4 — `Client parti avant la fin` dans le log — mais cause opposée : là c'est l'en-tête qui mentait, ici c'était l'URL. Les deux doivent concorder.
 4. Samsung rejette les MIME HLS → le proxy annonce `Content-Type: video/mp4` **sur le manifeste**, plus les en-têtes `transferMode.dlna.org` / `contentFeatures.dlna.org`. Le corps peut être du vrai HLS ; à ce stade la TV ne vérifie que le MIME.
 
-   **Mais le mensonge s'arrête au manifeste.** Les segments doivent être annoncés pour ce qu'ils sont (`video/mp2t` pour un `.ts`) : une fois la playlist acceptée, le démuxeur sait ce qu'il attend, et un segment TS présenté comme du MP4 le fait renoncer dès le premier. Symptôme observé : la TV réclame `seg-1`, puis referme la connexion — visible dans le log par `Client parti avant la fin`. Sur un MP4 progressif les deux branches donnent `video/mp4`, donc ce découpage ne change rien aux flux qui fonctionnaient déjà.
+   **Mais tout ce qui décrit le média s'arrête au manifeste.** Une fois la playlist acceptée, la TV démuxe et vérifie ce qu'elle reçoit. Trois choses doivent alors concorder sur un segment, et chacune a cassé la lecture à son tour :
+
+   | Sur un segment `.ts` | Faux | Correct |
+   |---|---|---|
+   | `Content-Type` | `video/mp4` | `video/mp2t` |
+   | Extension de l'URL proxy | `.mp4` | `.ts` |
+   | En-têtes DLNA | profil `AVC_MP4_…` | **aucun** |
+
+   Le dernier est le plus contre-intuitif : `contentFeatures.dlna.org` annonce un profil **MP4** ; le poser sur une réponse `video/mp2t` fait attendre du MP4 à la TV, qui referme. Ces en-têtes décrivent **la ressource désignée à la TV**, pas ses morceaux internes — d'où le drapeau `segment` porté par `streamStore` et propagé jusqu'aux en-têtes.
+
+   Le symptôme des trois est identique : la TV réclame `seg-1` puis referme la connexion, ce que le log montre par `Client parti avant la fin`. C'est un signal de contradiction, pas de panne réseau. Sur un MP4 progressif rien ne change, puisqu'il n'y a pas de segment.
 5. Les manifests HLS sont réécrits ligne par ligne par `rewriteM3u8()` — chaque URL de segment est résolue en absolu puis réenregistrée avec son propre ID court, pour que les entrées de playlist passent aussi par le proxy avec le `Referer` d'origine.
 6. Le cast se fait en deux niveaux : `castViaLibrary()` (fork jaruba de `upnp-mediarenderer-client`, qui gère la particularité EUPNP de Samsung) d'abord, puis `castViaSoap()` écrit à la main en secours.
 7. `castViaSoap()` essaie **quatre** variantes de metadata `SetAVTransportURI` dans l'ordre (protocolInfo DLNA complet → simplifié → sans metadata → MIME HLS), le comportement variant selon le firmware.
