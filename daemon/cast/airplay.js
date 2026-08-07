@@ -7,6 +7,9 @@ const mdnsLib = require('multicast-dns');
 const discovery = require('../discovery');
 
 let discoveredDevices = {}; // id → { name, host, port }
+// Nom de service mDNS → id en cache : l'identité stable de l'appareil, celle qui
+// ne change pas selon l'interface par laquelle il a répondu.
+const identites = {};
 
 function idFor(host) {
   return `airplay-${host.replace(/\./g, '-')}`;
@@ -68,10 +71,23 @@ function handleResponse(response) {
     if (isTVWithAirplay2) return;
 
     const id = idFor(ip);
+
+    // Même appareil déjà connu sous une autre adresse. Le nom de service mDNS ne
+    // dépend pas de l'interface qui a reçu la réponse, l'adresse si : un appareil
+    // joignable par deux chemins occupait deux lignes. On garde celle du réseau
+    // principal.
+    const jumeau = identites[serviceName];
+    if (jumeau && jumeau !== id && discoveredDevices[jumeau]) {
+      if (!discovery.adresseMeilleure(ip, discoveredDevices[jumeau].host)) return;
+      console.log(`[re:cast] AirPlay ${friendlyName} : ${discoveredDevices[jumeau].host} → ${ip} (réseau principal)`);
+      delete discoveredDevices[jumeau];
+    }
+
     if (!discoveredDevices[id]) {
       console.log(`[re:cast] AirPlay découvert: ${friendlyName} @ ${ip}`);
     }
     discoveredDevices[id] = { name: friendlyName, host: ip, port };
+    identites[serviceName] = id;
   });
 }
 

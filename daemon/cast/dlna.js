@@ -42,11 +42,29 @@ function decodeEntities(text) {
     .replace(/&amp;/gi,  '&'); // en dernier, sinon on décoderait deux fois
 }
 
+// UDN de l'appareil → id sous lequel il est en cache. Un même téléviseur répond
+// sur toutes les interfaces qui l'atteignent, avec une adresse différente par
+// chemin ; sans cette table, chacune faisait un appareil de plus.
+const identites = {};
+
 // La réponse SSDP porte déjà l'URL exacte du description.xml : pas besoin de sonder
 // les ports comme le fait l'ajout manuel.
-async function addFromSsdp({ host, location }) {
-  const id = idFor(host);
-  if (deviceCache[id]) return;
+async function addFromSsdp({ host, location, usn }) {
+  const id  = idFor(host);
+  const udn = discovery.udnDepuisUsn(usn);
+
+  // Déjà vu sous une AUTRE adresse : on ne garde que celle du réseau principal.
+  const jumeau = udn ? identites[udn] : null;
+  if (jumeau && jumeau !== id && deviceCache[jumeau]) {
+    if (!discovery.adresseMeilleure(host, deviceCache[jumeau].host)) return;
+    console.log(`[re:cast] DLNA ${deviceCache[jumeau].name} : ${deviceCache[jumeau].host} → ${host} (réseau principal)`);
+    delete deviceCache[jumeau];
+  }
+
+  if (deviceCache[id]) {
+    if (udn) identites[udn] = id;
+    return;
+  }
 
   let xml;
   try {
@@ -61,6 +79,12 @@ async function addFromSsdp({ host, location }) {
   const raw = xml.match(/<friendlyName>([^<]+)<\/friendlyName>/i)?.[1]?.trim();
   const name = raw ? decodeEntities(raw) : null;
   deviceCache[id] = { name: name || `TV (${host})`, host, location };
+
+  // Repli sur l'UDN du description.xml : tous les appareils ne renvoient pas un
+  // USN exploitable, et sans identité la déduplication ne servirait à rien.
+  const cle = udn || xml.match(/<UDN>\s*(uuid:[^<\s]+)/i)?.[1]?.toLowerCase();
+  if (cle) identites[cle] = id;
+
   console.log(`[re:cast] DLNA découvert: ${deviceCache[id].name} @ ${host} (${location})`);
 }
 

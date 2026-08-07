@@ -53,6 +53,12 @@ function listen() {
 const hostIps = {};   // 'xxxx.local' → ip
 const pending = {};   // 'xxxx.local' → { name, port }
 
+// Nom d'instance mDNS → id en cache. C'est l'identité stable de l'appareil : elle
+// ne dépend pas de l'interface par laquelle il a répondu, contrairement à son
+// adresse. `hostIps` est justement écrasé par la dernière réponse reçue, si bien
+// qu'une TV joignable par deux chemins se faisait enregistrer deux fois.
+const identites = {};
+
 // On part du SRV plutôt que du PTR : certains appareils répondent sans PTR, et le SRV
 // porte déjà le nom de service, l'hôte et le port.
 function handleResponse(response) {
@@ -78,23 +84,34 @@ function handleResponse(response) {
 
     const ip = hostIps[target];
     if (!ip) {
-      pending[target] = { friendly, fallback, port };   // l'adresse suivra
+      // l'adresse suivra
+      pending[target] = { friendly, fallback, port, identite: answer.name };
       return;
     }
-    register(ip, friendly, fallback, port);
+    register(ip, friendly, fallback, port, answer.name);
   });
 
   // 3. Débloquer les services dont l'adresse vient d'arriver
   Object.entries(pending).forEach(([target, info]) => {
     const ip = hostIps[target];
     if (!ip) return;
-    register(ip, info.friendly, info.fallback, info.port);
+    register(ip, info.friendly, info.fallback, info.port, info.identite);
     delete pending[target];
   });
 }
 
-function register(ip, friendly, fallback, port) {
+function register(ip, friendly, fallback, port, identite) {
   const id = idFor(ip);
+
+  // Même appareil déjà en cache sous une autre adresse : on ne garde que celle
+  // du réseau principal, sinon la même TV occupe deux lignes dans la liste.
+  const jumeau = identite ? identites[identite] : null;
+  if (jumeau && jumeau !== id && deviceCache[jumeau]) {
+    if (!discovery.adresseMeilleure(ip, deviceCache[jumeau].host)) return;
+    console.log(`[re:cast] Chromecast ${deviceCache[jumeau].name} : ${deviceCache[jumeau].host} → ${ip} (réseau principal)`);
+    delete deviceCache[jumeau];
+  }
+
   const known = deviceCache[id];
 
   // Ne jamais écraser un nom convivial déjà connu par le repli technique : une
@@ -105,6 +122,7 @@ function register(ip, friendly, fallback, port) {
     console.log(`[re:cast] Chromecast découvert: ${label} @ ${ip}:${port}`);
   }
   deviceCache[id] = { name: label, host: ip, port };
+  if (identite) identites[identite] = id;
 }
 
 // Le nom convivial vit dans l'enregistrement TXT, sous la clé `fn`

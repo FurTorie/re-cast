@@ -334,7 +334,29 @@ L'affichage prend `nom || nomReseau || hôte de l'URL`.
 
 Toutes les lectures passent donc par `appareilsDuServeur()` et `trouverEnregistre()` — lire `saved` directement réintroduit le mélange. Deux exceptions volontaires : `sousReseaux()`, qui veut au contraire **toutes** les IP connues puisqu'il cherche un daemon, n'importe lequel ; et `oublierServeur()`, qui emporte les appareils du serveur supprimé — rattachés à un serveur disparu, ils ne pourraient plus jamais réapparaître.
 
-Reste un doublon que ce découpage ne traite pas : **un seul daemon peut voir la même TV sur deux de ses interfaces** et la mettre deux fois en cache, sous deux IP. L'identité stable existe pourtant dans les réponses (le `target` `.local` du SRV mDNS côté Chromecast, l'`UDN` UPnP côté DLNA) ; elle n'est pas encore exploitée.
+Ce découpage ne traite que la moitié du problème. L'autre est côté daemon : **un seul daemon voit la même TV sur deux de ses interfaces** dès que plusieurs chemins mènent à elle. Voir « Un appareil, plusieurs adresses » ci-dessous.
+
+### Un appareil, plusieurs adresses
+
+Émettre la découverte depuis **toutes** les interfaces est nécessaire (raison plus haut), mais a une contrepartie : quand plusieurs chemins mènent au même appareil, il répond sur chacun, avec l'adresse propre à ce chemin. Le partage de connexion Windows crée exactement ce cas — son sous-réseau `192.168.137.0/24` est fixe — et une TV devient joignable en `192.168.1.13` par le Wi-Fi *et* en `192.168.137.247` par le partage.
+
+Les caches étant indexés sur l'IP (`dlna-192-168-1-13`), la même TV occupait alors une entrée par adresse **et par protocole**. Mesuré sur un poste avec partage actif : `4 appareil(s) mis en cache: [ '85" QLED', '85" QLED', '85" QLED', '85" QLED' ]` — un seul téléviseur.
+
+Chaque module tient donc une table `identites` : **identité stable → id en cache**. L'identité ne dépend pas de l'interface qui a reçu la réponse, contrairement à l'adresse.
+
+| Protocole | Identité stable | Origine |
+|---|---|---|
+| DLNA | l'UDN | en-tête `USN` de la réponse SSDP, repli sur `<UDN>` du description.xml |
+| Chromecast | le nom d'instance mDNS | le `name` de l'enregistrement SRV |
+| AirPlay | le nom de service mDNS | la donnée du PTR |
+
+**Deux points à ne pas défaire :**
+
+- `discovery.search()` déduplique par `LOCATION`, ce qui ne suffit pas : l'URL contient l'IP, donc deux réponses du même appareil ont deux locations. Et l'en-tête `USN`, qui porte l'identité, n'était pas extrait du tout de la réponse SSDP.
+- `adresseMeilleure()` ne remplace une adresse connue **que** pour gagner le réseau principal — celui de l'interface de sortie par défaut. À égalité, la première vue reste. Une règle qui bascule à chaque découverte ferait changer l'ID de l'appareil d'un scan à l'autre, et l'extension perdrait ses appareils enregistrés à chaque fois.
+
+On garde l'adresse du réseau principal parce que c'est celle que le téléphone et la TV ont en commun, et la seule qui survive à l'extinction du partage de connexion. `POST /devices/add` n'est pas concerné : un ajout manuel est explicite, il enregistre l'IP demandée.
+
 
 `daemonUrl`, l'ancienne clé, n'est plus **écrite** : son seul autre lecteur était le panneau injecté, supprimé depuis. Elle est encore **lue une fois**, dans `chargerServeurs()`, quand `servers` est absent — c'est la reprise des installations antérieures, et rien d'autre. Ne pas la remettre à jour « au cas où » : une clé écrite que personne ne lit finit par diverger sans que rien ne le signale.
 

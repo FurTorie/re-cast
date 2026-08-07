@@ -93,6 +93,42 @@ function isLikelyVirtual(iface) {
     || /^169\.254\./.test(iface.address);
 }
 
+// ─── Un appareil, plusieurs adresses ──────────────────────────────────────────
+//
+// Émettre depuis toutes les interfaces est nécessaire (cf. en-tête), mais a une
+// contrepartie : quand PLUSIEURS chemins mènent au même appareil, il répond sur
+// chacun, avec l'adresse correspondant à ce chemin. Un PC qui partage sa connexion
+// crée exactement ce cas — Windows fixe ce réseau à `192.168.137.0/24` — et la TV
+// se retrouve joignable en `192.168.1.13` par le Wi-Fi et en `192.168.137.247`
+// par le partage. Les caches étant indexés sur l'IP, la même TV occupait alors
+// deux entrées par protocole : quatre lignes pour un seul téléviseur, mesuré.
+//
+// D'où le départage ci-dessous. On garde l'adresse du réseau principal : c'est
+// celle que le téléphone et la TV ont en commun, et la seule qui survive à
+// l'extinction du partage de connexion.
+
+function surReseauPrefere(host) {
+  if (!host || !preferred) return false;
+  const iface = interfaces().find(i => i.address === preferred);
+  return !!iface && sameSubnet(preferred, host, iface.netmask);
+}
+
+// Faut-il remplacer l'adresse déjà connue d'un appareil par une nouvelle ?
+// Seulement pour gagner le réseau principal. À égalité, la première vue reste :
+// une règle qui bascule à chaque découverte ferait changer l'ID de l'appareil
+// d'un scan à l'autre, et l'extension perdrait ses appareils enregistrés.
+function adresseMeilleure(nouvelle, connue) {
+  if (!nouvelle || nouvelle === connue) return false;
+  return surReseauPrefere(nouvelle) && !surReseauPrefere(connue);
+}
+
+// L'en-tête USN d'une réponse SSDP porte l'UDN de l'appareil, stable d'une
+// interface à l'autre — contrairement à son adresse :
+//   « uuid:xxxxxxxx-…::urn:schemas-upnp-org:device:MediaRenderer:1 »
+function udnDepuisUsn(usn) {
+  return /^(uuid:[0-9a-z-]+)/i.exec(usn || '')?.[1].toLowerCase() || null;
+}
+
 // ─── M-SEARCH SSDP ────────────────────────────────────────────────────────────
 
 function buildMSearch(st, mx) {
@@ -137,6 +173,9 @@ function searchFrom(iface, sts, timeoutMs, onDevice) {
       onDevice({
         host:     rinfo.address,
         location,
+        // Seule identité de l'appareil qui ne change pas avec l'interface par
+        // laquelle il a répondu — c'est elle qui permet de dédupliquer.
+        usn:      header(text, 'USN') || '',
         st:       header(text, 'ST') || header(text, 'NT') || '',
         server:   header(text, 'SERVER') || ''
       });
@@ -177,4 +216,7 @@ async function search({ sts, timeoutMs = 4000, onDevice = () => {} } = {}) {
   return [...found.values()];
 }
 
-module.exports = { search, interfaces, localIpFor, resolvePreferred, sameSubnet };
+module.exports = {
+  search, interfaces, localIpFor, resolvePreferred, sameSubnet,
+  surReseauPrefere, adresseMeilleure, udnDepuisUsn
+};
