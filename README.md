@@ -56,7 +56,16 @@ Le menu, au clic sur l'icône, donne :
 - la console, qui affiche la sortie du daemon et compte les erreurs ;
 - une case « Démarrer avec Windows » (clé `Run` de l'utilisateur, sans droits administrateur).
 
-**Pourquoi pas Electron :** l'app doit tourner en permanence. Electron coûterait ~180 Mo sur disque et ~150 Mo de RAM rien que pour afficher un menu. Ici l'ensemble tourne autour de 36 Mo pour l'app, plus le daemon Node. Les paquets npm de barre des tâches ont aussi été écartés : `tray-icon-node` tire 195 Mo de dépendances et son binding natif ne se charge pas sur Windows.
+**Pourquoi pas Electron :** l'app doit tourner en permanence. Electron coûterait ~180 Mo sur disque et ~150 Mo de RAM rien que pour afficher un menu. Les paquets npm de barre des tâches ont aussi été écartés : `tray-icon-node` tire 195 Mo de dépendances et son binding natif ne se charge pas sur Windows.
+
+**L'empreinte mémoire est un objectif explicite**, et quatre choses la servent — à ne pas défaire :
+
+- `Memoire.Compacter()` appelle `EmptyWorkingSet` après le démarrage et à la fermeture de la console. Le démarrage (chargement des assemblies, JIT, création des contrôles) est de loin le moment le plus gourmand, et ces pages ne resservent plus ensuite. Windows les rechargera à la demande dans le cas rare où elles redeviennent utiles.
+- `Recast.exe.config` désactive le **GC concurrent** : son thread de fond et son budget mémoire n'ont pas de sens pour une icône qui dort.
+- Le **menu est libéré** à chaque remplacement. Sans ça, chaque rafraîchissement abandonnait un `ContextMenuStrip` complet avec ses handles — une fuite bien réelle sur une app qui tourne des jours. La libération est différée si le menu est ouvert, pour ne pas le détruire sous les doigts de l'utilisateur.
+- Le **sondage s'adapte** : 3 s pendant une lecture, 10 s au repos.
+
+Une nuance honnête : le *working set* affiché par le Gestionnaire des tâches chute beaucoup, mais les octets privés restent autour de 24 Mo — c'est le plancher du .NET Framework avec WinForms. Descendre plus bas demanderait du Win32 brut (`Shell_NotifyIcon` + `CreatePopupMenu`), soit environ 6 Mo, au prix d'un code nettement plus verbeux.
 
 La console lit la **sortie standard du processus Node**, pas une API : les erreurs de démarrage restent donc visibles même quand le serveur n'a jamais réussi à écouter — précisément le moment où on en a besoin.
 

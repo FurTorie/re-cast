@@ -15,6 +15,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Net;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
@@ -32,10 +33,39 @@ namespace Recast
         }
     }
 
+    // ─── Mémoire ──────────────────────────────────────────────────────────────
+    // Une app qui reste allumée en permanence doit rendre ce qu'elle n'utilise
+    // plus. Après le démarrage, .NET garde résidentes quantité de pages qui ne
+    // resserviront jamais : EmptyWorkingSet les rend à Windows, qui les
+    // rechargera à la demande dans le cas rare où elles redeviennent utiles.
+
+    static class Memoire
+    {
+        [DllImport("psapi.dll")]
+        static extern int EmptyWorkingSet(IntPtr hProcess);
+
+        [DllImport("user32.dll")]
+        internal static extern bool DestroyIcon(IntPtr handle);
+
+        public static void Compacter()
+        {
+            try
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+                EmptyWorkingSet(Process.GetCurrentProcess().Handle);
+            }
+            catch { }
+        }
+    }
+
     class TrayApp : ApplicationContext
     {
         const int PORT = 7171;
-        const int MAX_LIGNES = 2000;
+        const int MAX_LIGNES = 600;          // ~60 Ko de journal, largement assez pour diagnostiquer
+        const int SONDAGE_REPOS = 10000;     // au repos, rien ne change vite
+        const int SONDAGE_LECTURE = 3000;    // pendant une lecture, on veut voir l'arrêt rapidement
 
         readonly NotifyIcon icone;
         readonly Timer sondage;
@@ -65,25 +95,45 @@ namespace Recast
 
             // Le serveur met un instant à répondre ; on sonde régulièrement plutôt
             // que d'attendre, ce qui rend aussi visible une coupure ultérieure.
-            sondage = new Timer { Interval = 3000 };
+            // La cadence s'adapte : inutile d'interroger toutes les 3 s quand rien
+            // ne joue, c'est autant d'allocations et de réveils du processeur.
+            sondage = new Timer { Interval = SONDAGE_LECTURE };
             sondage.Tick += (s, e) => Sonder();
             sondage.Start();
+
+            // Le démarrage est de loin le moment le plus gourmand : chargement des
+            // assemblies, JIT, création des contrôles. Une fois passé, on rend tout
+            // ce qui ne resservira pas.
+            var apresDemarrage = new Timer { Interval = 8000 };
+            apresDemarrage.Tick += (s, e) => { apresDemarrage.Stop(); apresDemarrage.Dispose(); Memoire.Compacter(); };
+            apresDemarrage.Start();
         }
 
         // ─── Icône ────────────────────────────────────────────────────────────
 
         // On part du PNG livré avec l'app : pas besoin de générer un .ico.
+        // GetHicon() alloue un handle non managé que le ramasse-miettes ne libère
+        // pas : on recopie l'icône puis on détruit le handle, sinon il fuit.
         Icon ChargerIcone()
         {
             string chemin = Path.Combine(DossierApp(), "tray.png");
+            IntPtr h = IntPtr.Zero;
             try
             {
                 using (var bmp = new Bitmap(chemin))
-                    return Icon.FromHandle(bmp.GetHicon());
+                {
+                    h = bmp.GetHicon();
+                    using (var temporaire = Icon.FromHandle(h))
+                        return (Icon)temporaire.Clone();
+                }
             }
             catch
             {
                 return SystemIcons.Application;
+            }
+            finally
+            {
+                if (h != IntPtr.Zero) Memoire.DestroyIcon(h);
             }
         }
 
@@ -206,6 +256,11 @@ namespace Recast
             lectureNom = nom;
             lectureProto = proto;
             if (adresse == null) adresse = LireAdresseDuJournal() ?? ("localhost:" + PORT);
+
+            // Cadence adaptée : rapide pendant une lecture, lente au repos
+            int voulu = string.IsNullOrEmpty(lectureNom) ? SONDAGE_REPOS : SONDAGE_LECTURE;
+            if (sondage.Interval != voulu) sondage.Interval = voulu;
+
             if (change) Rafraichir();
         }
 
@@ -337,7 +392,19 @@ namespace Recast
             quitter.Click += (s, e) => Quitter();
             menu.Items.Add(quitter);
 
+            // Libérer l'ancien menu : sans ça chaque rafraîchissement en abandonnait
+            // un complet, avec ses items et leurs handles. Sur une app qui tourne
+            // des jours, la fuite est loin d'être théorique.
+            var precedent = icone.ContextMenuStrip;
             icone.ContextMenuStrip = menu;
+            if (precedent != null)
+            {
+                // Un menu ouvert au moment du rafraîchissement ne doit pas être
+                // détruit sous les doigts de l'utilisateur : on attend sa fermeture.
+                if (precedent.Visible) precedent.Closed += (s, e) => precedent.Dispose();
+                else precedent.Dispose();
+            }
+
             icone.Text = !string.IsNullOrEmpty(lectureNom)
                 ? Tronquer("re:cast — " + lectureNom, 63)
                 : actif ? Tronquer("re:cast — " + adresse, 63) : "re:cast — arrêté";
@@ -397,6 +464,9 @@ namespace Recast
             }
 
             console = new ConsoleForm(this);
+            // La fenêtre détient tout le journal dupliqué dans un TextBox : à sa
+            // fermeture on la relâche et on rend la mémoire.
+            console.FormClosed += (s, e) => { console = null; Memoire.Compacter(); };
             console.Show();
         }
 
