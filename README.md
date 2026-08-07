@@ -40,6 +40,15 @@ Plutôt que de garder un terminal ouvert, l'app place une icône dans la zone de
 
 **Installation :** télécharger `recast-setup-X.Y.Z.exe` depuis les [releases](../../releases) et l'exécuter. Aucun droit administrateur n'est demandé. L'installateur contient l'app **et** le daemon avec ses dépendances — seul Node.js doit être présent sur la machine, ce qu'il vérifie et signale.
 
+**Mise à jour automatique.** L'app consulte [`app-latest.json`](app-latest.json) 30 s après son démarrage puis toutes les 6 h. Quand une version plus récente existe, elle apparaît en gras dans le menu et une bulle le signale ; un clic télécharge et installe.
+
+Télécharger puis exécuter un `.exe` mérite des garde-fous, il y en a deux et ils ne sont pas négociables :
+
+1. **L'URL doit commencer par `https://github.com/FurTorie/re-cast/releases/download/`.** Sans ce contrôle, un manifeste altéré ferait exécuter n'importe quel binaire.
+2. **L'empreinte SHA-256 publiée par la CI doit correspondre au fichier téléchargé.** Sinon le fichier est supprimé et rien n'est lancé.
+
+L'installation se fait en `/SILENT` et l'app se relance seule — d'où l'absence de `skipifsilent` sur l'entrée `[Run]` du script Inno Setup, sans laquelle elle ne redémarrerait jamais. Une lecture en cours est signalée avant, puisqu'elle sera interrompue.
+
 **Depuis les sources :**
 
 ```powershell

@@ -65,7 +65,9 @@ Name: "{autodesktop}\{#SafeName}";        Filename: "{app}\{#AppExe}"; Tasks: bu
 Name: "{userstartup}\{#SafeName}";        Filename: "{app}\{#AppExe}"; Tasks: demarrage
 
 [Run]
-Filename: "{app}\{#AppExe}"; Description: "Lancer {#AppName} maintenant"; Flags: nowait postinstall skipifsilent
+; Pas de skipifsilent : la mise a jour automatique installe en /SILENT et compte
+; sur cette ligne pour relancer l'app, comme le message le promet a l'utilisateur.
+Filename: "{app}\{#AppExe}"; Description: "Lancer {#AppName} maintenant"; Flags: nowait postinstall
 
 [UninstallRun]
 ; Fermer l'app avant desinstallation, sinon les fichiers restent verrouilles

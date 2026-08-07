@@ -93,6 +93,7 @@ jobs:
 
       - name: Publier la release
         if: steps.check.outputs.publier == 'oui'
+        id: release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.v.outputs.tag }}
@@ -106,4 +107,39 @@ jobs:
             L'installateur contient l'app **et** le daemon avec ses dépendances.
             **Node.js doit être installé sur la machine** — l'installateur le vérifie
             et prévient si ce n'est pas le cas.
+
+            Les installations existantes proposeront cette version d'elles-mêmes.
           files: dist/*.exe
+
+      # Manifeste consulté par les apps déjà installées. Écrit APRÈS la release,
+      # pour que l'URL qu'il annonce soit déjà téléchargeable. L'empreinte permet
+      # à l'app de refuser un fichier qui ne serait pas exactement celui publié.
+      - name: Mettre à jour app-latest.json
+        if: steps.check.outputs.publier == 'oui'
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem dist -Filter *.exe | Select-Object -First 1
+          $sha = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash
+          $url = "https://github.com/${{ github.repository }}/releases/download/${{ steps.v.outputs.tag }}/$($exe.Name)"
+
+          $manifeste = [ordered]@{
+            version = "${{ steps.v.outputs.version }}"
+            url     = $url
+            sha256  = $sha
+            taille  = $exe.Length
+          }
+          $manifeste | ConvertTo-Json | Set-Content app-latest.json -Encoding UTF8
+
+          Write-Host "url    : $url"
+          Write-Host "sha256 : $sha"
+
+      - name: Committer app-latest.json
+        if: steps.check.outputs.publier == 'oui'
+        shell: bash
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app-latest.json
+          git diff --staged --quiet && echo "rien à committer" && exit 0
+          git commit -m "app-latest.json : app ${{ steps.v.outputs.version }}"
+          git push

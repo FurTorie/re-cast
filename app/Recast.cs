@@ -16,6 +16,7 @@ using System.Drawing;
 using System.IO;
 using System.Net;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
@@ -60,6 +61,111 @@ namespace Recast
         }
     }
 
+    // ─── Mise à jour ──────────────────────────────────────────────────────────
+    // L'app telecharge et execute un installateur : c'est puissant, donc deux
+    // verrous non negociables.
+    //   1. L'URL doit pointer vers les releases de CE depot. Sans ce controle, un
+    //      manifeste altere ferait executer n'importe quel binaire.
+    //   2. L'empreinte SHA-256 publiee par la CI doit correspondre au fichier
+    //      telecharge, sinon on jette.
+    // On passe par un manifeste statique plutot que par l'API GitHub : pas de
+    // quota, et c'est le meme principe que l'updates.json de l'extension.
+
+    static class MiseAJour
+    {
+        const string MANIFESTE = "https://raw.githubusercontent.com/FurTorie/re-cast/main/app-latest.json";
+        const string PREFIXE_AUTORISE = "https://github.com/FurTorie/re-cast/releases/download/";
+
+        public class Info
+        {
+            public Version Version;
+            public string Url;
+            public string Sha256;
+        }
+
+        // Retourne null s'il n'y a rien de plus recent, ou en cas d'echec reseau :
+        // une mise a jour ratee ne doit jamais gener l'usage normal.
+        public static Info Chercher(Version courante)
+        {
+            try
+            {
+                ServicePointManager.SecurityProtocol =
+                    SecurityProtocolType.Tls12 | (SecurityProtocolType)12288; // 12288 = Tls13
+
+                string json;
+                using (var wc = new WebClient())
+                {
+                    wc.Encoding = Encoding.UTF8;
+                    wc.Headers.Add("User-Agent", "recast-app");
+                    json = wc.DownloadString(MANIFESTE + "?t=" + DateTime.UtcNow.Ticks);
+                }
+
+                string v   = Champ(json, "version");
+                string url = Champ(json, "url");
+                string sha = Champ(json, "sha256");
+                if (v == null || url == null) return null;
+
+                Version distante;
+                if (!Version.TryParse(v.Length == 3 || v.Split('.').Length == 3 ? v + ".0" : v, out distante))
+                    return null;
+
+                if (distante <= courante) return null;
+                if (!url.StartsWith(PREFIXE_AUTORISE, StringComparison.OrdinalIgnoreCase)) return null;
+
+                return new Info { Version = distante, Url = url, Sha256 = sha };
+            }
+            catch { return null; }
+        }
+
+        static string Champ(string json, string nom)
+        {
+            var m = Regex.Match(json, "\"" + nom + "\"\\s*:\\s*\"([^\"]*)\"");
+            return m.Success ? m.Groups[1].Value : null;
+        }
+
+        // Retourne le chemin du fichier telecharge, ou null si quoi que ce soit cloche.
+        public static string Telecharger(Info info)
+        {
+            string cible = Path.Combine(Path.GetTempPath(), "recast-setup-" + info.Version + ".exe");
+            try
+            {
+                using (var wc = new WebClient())
+                {
+                    wc.Headers.Add("User-Agent", "recast-app");
+                    wc.DownloadFile(info.Url, cible);
+                }
+
+                if (!string.IsNullOrEmpty(info.Sha256))
+                {
+                    string reel = Empreinte(cible);
+                    if (!string.Equals(reel, info.Sha256, StringComparison.OrdinalIgnoreCase))
+                    {
+                        try { File.Delete(cible); } catch { }
+                        return null;
+                    }
+                }
+                return cible;
+            }
+            catch
+            {
+                try { if (File.Exists(cible)) File.Delete(cible); } catch { }
+                return null;
+            }
+        }
+
+        static string Empreinte(string chemin)
+        {
+            using (var sha = SHA256.Create())
+            using (var flux = File.OpenRead(chemin))
+                return BitConverter.ToString(sha.ComputeHash(flux)).Replace("-", "");
+        }
+
+        public static Version Courante()
+        {
+            return System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+        }
+    }
+
     class TrayApp : ApplicationContext
     {
         const int PORT = 7171;
@@ -80,8 +186,16 @@ namespace Recast
         int nbErreurs;
         bool redemarrage;
 
+        readonly System.Threading.SynchronizationContext ui;
+        MiseAJour.Info majDispo;
+        bool majEnCours;
+
         public TrayApp()
         {
+            // Capturé ici, sur le thread d'interface : les vérifications réseau
+            // tournent en tâche de fond et doivent revenir par ce canal.
+            ui = System.Threading.SynchronizationContext.Current;
+
             icone = new NotifyIcon
             {
                 Icon = ChargerIcone(),
@@ -107,6 +221,12 @@ namespace Recast
             var apresDemarrage = new Timer { Interval = 8000 };
             apresDemarrage.Tick += (s, e) => { apresDemarrage.Stop(); apresDemarrage.Dispose(); Memoire.Compacter(); };
             apresDemarrage.Start();
+
+            // Première vérification 30 s après le démarrage — laisser le daemon
+            // se lancer d'abord — puis toutes les 6 h.
+            var verifMaj = new Timer { Interval = 30000 };
+            verifMaj.Tick += (s, e) => { verifMaj.Interval = 6 * 3600 * 1000; ChercherMaj(); };
+            verifMaj.Start();
         }
 
         // ─── Icône ────────────────────────────────────────────────────────────
@@ -381,6 +501,23 @@ namespace Recast
             cons.Click += (s, e) => OuvrirConsole();
             menu.Items.Add(cons);
 
+            // Mise à jour : n'apparaît que s'il y a réellement quelque chose de neuf
+            if (majDispo != null)
+            {
+                menu.Items.Add(new ToolStripSeparator());
+                if (majEnCours)
+                {
+                    menu.Items.Add(Inerte("⏳  Téléchargement…"));
+                }
+                else
+                {
+                    var maj = new ToolStripMenuItem("⬆  Installer la version " + Court(majDispo.Version));
+                    maj.Font = new Font(maj.Font, FontStyle.Bold);
+                    maj.Click += (s, e) => InstallerMaj();
+                    menu.Items.Add(maj);
+                }
+            }
+
             menu.Items.Add(new ToolStripSeparator());
 
             var demarrage = new ToolStripMenuItem("Démarrer avec Windows");
@@ -451,6 +588,100 @@ namespace Recast
             {
                 Ajouter("[app] Arrêt de la lecture impossible : " + ex.Message);
             }
+        }
+
+        // ─── Mise à jour ──────────────────────────────────────────────────────
+
+        void ChercherMaj()
+        {
+            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+            {
+                var info = MiseAJour.Chercher(MiseAJour.Courante());
+                if (info == null) return;
+                ui.Post(__ =>
+                {
+                    if (majDispo != null && majDispo.Version >= info.Version) return;
+                    majDispo = info;
+                    Ajouter("[app] Mise à jour disponible : " + Court(info.Version));
+                    Rafraichir();
+                    try
+                    {
+                        icone.BalloonTipTitle = "re:cast";
+                        icone.BalloonTipText = "Version " + Court(info.Version) + " disponible";
+                        icone.ShowBalloonTip(5000);
+                    }
+                    catch { }
+                }, null);
+            });
+        }
+
+        void InstallerMaj()
+        {
+            if (majDispo == null || majEnCours) return;
+            majEnCours = true;
+            Rafraichir();
+
+            var info = majDispo;
+            Ajouter("[app] Téléchargement de la mise à jour…");
+
+            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+            {
+                string fichier = MiseAJour.Telecharger(info);
+                ui.Post(__ =>
+                {
+                    majEnCours = false;
+
+                    if (fichier == null)
+                    {
+                        // Empreinte fausse ou téléchargement interrompu : on ne lance rien.
+                        Ajouter("[app] Mise à jour abandonnée : téléchargement ou empreinte invalide.");
+                        MessageBox.Show(
+                            "Le téléchargement a échoué, ou l'empreinte du fichier ne correspond pas.\n\n" +
+                            "Rien n'a été installé.",
+                            "re:cast", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        Rafraichir();
+                        return;
+                    }
+
+                    // L'installateur remplace des fichiers que cette app utilise :
+                    // il faut donc quitter. On demande avant, plutôt que de fermer
+                    // le serveur sous les pieds d'une lecture en cours.
+                    string enCours = string.IsNullOrEmpty(lectureNom)
+                        ? ""
+                        : "\n\nUne lecture est en cours sur " + lectureNom + " : elle sera interrompue.";
+
+                    var choix = MessageBox.Show(
+                        "La version " + Court(info.Version) + " est prête à être installée.\n\n" +
+                        "re:cast va se fermer pendant l'installation, puis redémarrer." + enCours,
+                        "re:cast — mise à jour",
+                        MessageBoxButtons.OKCancel, MessageBoxIcon.Information);
+
+                    if (choix != DialogResult.OK) { Rafraichir(); return; }
+
+                    try
+                    {
+                        // /SILENT : garder une barre de progression, sans questions.
+                        // L'app se relance seule grâce au postinstall du script.
+                        Process.Start(new ProcessStartInfo(fichier, "/SILENT /NOCANCEL")
+                        {
+                            UseShellExecute = true
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Ajouter("[app] Lancement de l'installateur impossible : " + ex.Message);
+                        Rafraichir();
+                        return;
+                    }
+
+                    Quitter();
+                }, null);
+            });
+        }
+
+        static string Court(Version v)
+        {
+            return v.Major + "." + v.Minor + "." + v.Build;
         }
 
         void OuvrirConsole()
