@@ -86,12 +86,22 @@ function getPriority(url) {
 browser.webRequest.onBeforeSendHeaders.addListener(
   (details) => {
     if (!isStreamUrl(details.url)) return;
+
+    const entree = streamStore[details.tabId];
+    if (!entree) return;
+
+    // N'attacher le Referer qu'à l'URL réellement retenue. Sans ce test, n'importe
+    // quelle requête ressemblant à un stream écrasait la valeur — y compris par
+    // `null` quand elle n'avait pas d'en-tête Referer. Le daemon partait alors sans,
+    // et beaucoup de CDN répondent 403 : lecture qui démarre puis ne charge rien.
+    if (entree.url !== details.url) return;
+
     const referer = details.requestHeaders?.find(
       h => h.name.toLowerCase() === 'referer'
     )?.value;
-    if (streamStore[details.tabId]) {
-      streamStore[details.tabId].referer = referer || null;
-    }
+
+    // Ne jamais remplacer un Referer valide par une absence
+    if (referer) entree.referer = referer;
   },
   { urls: ['<all_urls>'] },
   ['requestHeaders']

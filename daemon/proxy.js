@@ -227,6 +227,18 @@ function fetchAndProxy(target, referer, req, res, mode = 'samsung', attempt = 0)
     proxyRes.on('aborted', () => upstreamFailed(new Error('connexion amont coupée')));
 
     const upstreamType = proxyRes.headers['content-type'] || '';
+
+    // Un refus du CDN passait totalement inaperçu : on réécrivait la page d'erreur
+    // comme si c'était une playlist et on transmettait le code au lecteur, qui
+    // abandonnait en silence. Cas réel : 403 Cloudflare faute de Referer.
+    if (proxyRes.statusCode >= 400) {
+      console.error(`[re:cast] ⚠ Le serveur distant refuse : HTTP ${proxyRes.statusCode} (${upstreamType || 'sans type'})`);
+      console.error(`[re:cast]   ${target.substring(0, 90)}`);
+      if (!referer) {
+        console.error('[re:cast]   Aucun Referer transmis — beaucoup de CDN refusent sans lui.');
+      }
+    }
+
     const isM3u8 = target.includes('.m3u8') || target.includes('index-v') ||
                    upstreamType.includes('mpegurl') || upstreamType.includes('x-mpegURL');
 
@@ -280,6 +292,17 @@ function fetchAndProxy(target, referer, req, res, mode = 'samsung', attempt = 0)
         // Un manifeste tronqué ne doit surtout pas être servi ni mis en cache :
         // il resterait valable une minute et casserait toute la lecture.
         if (aborted) return;
+
+        // Le corps n'est pas une playlist : page d'erreur, captcha, redirection
+        // HTML… La réécrire produisait des « URLs proxifiées » absurdes tirées du
+        // HTML, et masquait complètement la cause. On sert tel quel et on le dit.
+        if (!body.trimStart().startsWith('#EXTM3U')) {
+          const apercu = body.trim().slice(0, 120).replace(/\s+/g, ' ');
+          console.error(`[re:cast] ⚠ Réponse annoncée HLS mais ce n'est pas une playlist : ${apercu}`);
+          headers['Content-Length'] = Buffer.byteLength(body);
+          res.writeHead(proxyRes.statusCode, headers);
+          return res.end(body);
+        }
 
         // clientIp(req) = l'appareil qui vient chercher le manifest : les URLs de
         // segments doivent pointer vers l'interface locale qu'il sait joindre, et

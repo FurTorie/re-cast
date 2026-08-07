@@ -59,7 +59,14 @@ curl http://localhost:7171/devices
 
 ### Détection du stream (extension)
 
-`background/background.js` est le seul endroit où une URL de stream est choisie. Il surveille `webRequest.onBeforeRequest` pour les types `xmlhttprequest` / `media` / `other`, compare aux motifs d'URL de `isStreamUrl()`, et conserve **un seul stream par `tabId`** dans un `streamStore` en mémoire. `onBeforeSendHeaders` capture séparément le `Referer` de cette URL — le daemon en a besoin pour re-télécharger les streams protégés.
+`background/background.js` est le seul endroit où une URL de stream est choisie. Il surveille `webRequest.onBeforeRequest` pour les types `xmlhttprequest` / `media` / `other`, compare aux motifs d'URL de `isStreamUrl()`, et conserve **un seul stream par `tabId`** dans un `streamStore` en mémoire.
+
+`onBeforeSendHeaders` capture séparément le `Referer`, et **deux garde-fous y sont indispensables** :
+
+- ne l'attacher que si `details.url` est exactement l'URL retenue ;
+- ne jamais remplacer un `Referer` valide par une absence.
+
+Sans eux, n'importe quelle requête ressemblant à un stream écrasait la valeur, y compris par `null`. Le daemon partait alors sans `Referer` et **beaucoup de CDN répondent 403** — cas mesuré sur Cloudflare, où la même requête passe de 403 à 200 par le seul ajout de l'en-tête. Symptôme : la lecture démarre sur la TV puis ne charge jamais rien.
 
 Les URLs concurrentes sont arbitrées par `getPriority()` :
 
