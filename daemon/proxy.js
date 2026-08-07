@@ -46,8 +46,8 @@ function journaliserCacheHit(cle) {
 
   if (maintenant - e.dernierLog >= 5000) {
     console.log(e.n > 1
-      ? `[re:cast] Manifest servi depuis le cache (${e.n} requêtes)`
-      : '[re:cast] Manifest servi depuis le cache');
+      ? `[re:cast] Manifest depuis le cache (${e.n} demandes du lecteur)`
+      : '[re:cast] Manifest depuis le cache');
     e.dernierLog = maintenant;
     e.n = 0;
   }
@@ -159,8 +159,6 @@ const MAX_ATTEMPTS = 3;
 
 // Proxy d'une URL vers le client
 function fetchAndProxy(target, referer, req, res, mode = 'samsung', attempt = 0, estSegment = false) {
-  console.log(`[re:cast] Proxy fetch (${mode}): ${target.substring(0, 80)}`);
-
   const parsed  = url.parse(target);
   const isHttps = parsed.protocol === 'https:';
   const lib     = isHttps ? https : http;
@@ -183,6 +181,11 @@ function fetchAndProxy(target, referer, req, res, mode = 'samsung', attempt = 0,
       return res.end(hit.body);
     }
   }
+
+  // Journalisé ICI et pas à l'entrée de la fonction : une requête servie depuis le
+  // cache n'atteint jamais le CDN, et l'annoncer comme un « fetch » donnait une
+  // fausse image du trafic réseau — au point de me faire mal lire un log.
+  console.log(`[re:cast] ${estSegment ? 'Segment' : 'Fetch'} (${mode}) → ${target.substring(0, 78)}`);
 
   const options = {
     hostname: parsed.hostname,
