@@ -66,6 +66,16 @@ Source: "..\daemon\*"; DestDir: "{app}\daemon"; Flags: ignoreversion recursesubd
 ; caracteres suivants » a l'installation.
 ; IconFilename explicite : l'icone est embarquee dans l'exe, mais le preciser
 ; evite tout doute quand l'explorateur a mis en cache l'ancienne icone generique.
+; Raccourcis de l'ancien nom « re-cast », d'avant le passage a « Re Cast ».
+; Inno cree le nouveau nom mais ne supprime jamais l'ancien : les deux
+; coexistaient, dont un doublon au demarrage de session qui lancait l'app une
+; seconde fois. Supprimes AVANT la pose des nouveaux, jamais apres.
+[InstallDelete]
+Type: files; Name: "{autodesktop}\re-cast.lnk"
+Type: files; Name: "{group}\re-cast.lnk"
+Type: files; Name: "{group}\Desinstaller re-cast.lnk"
+Type: files; Name: "{userstartup}\re-cast.lnk"
+
 [Icons]
 Name: "{group}\{#ShortcutName}";              Filename: "{app}\{#AppExe}"; IconFilename: "{app}\{#AppExe}"
 Name: "{group}\Desinstaller {#ShortcutName}"; Filename: "{uninstallexe}"
@@ -82,6 +92,27 @@ Filename: "{app}\{#AppExe}"; Description: "Lancer {#AppName} maintenant"; Flags:
 Filename: "{cmd}"; Parameters: "/C taskkill /IM {#AppExe} /F"; Flags: runhidden; RunOnceId: "FermerApp"
 
 [Code]
+// Prevenir le shell que les icones ont change. Sans cela, une mise a jour
+// laisse le raccourci afficher l'ANCIEN logo, parfois pendant des jours.
+//
+// La raison tient a la facon dont Windows indexe son cache d'icones : sur le
+// couple (chemin du fichier, index). Or le chemin de Recast.exe ne change
+// jamais d'une version a l'autre. Le shell considere donc son entree encore
+// valable et ne relit jamais la ressource, meme si l'exe a ete remplace et son
+// icone avec. Recreer le raccourci n'y change rien : c'est la cible qui est en
+// cache, pas le .lnk.
+//
+// SHCNE_ASSOCCHANGED ($08000000) invalide ces entrees. SHCNF_IDLIST ($0000)
+// est la forme attendue quand aucun element precis n'est designe.
+procedure SHChangeNotify(wEventId: Integer; uFlags: Cardinal; dwItem1, dwItem2: Cardinal);
+  external 'SHChangeNotify@shell32.dll stdcall';
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+    SHChangeNotify($08000000, $0000, 0, 0);
+end;
+
 // Node.js n'est pas embarque : le daemon en a besoin pour tourner. On previent
 // plutot que de laisser l'utilisateur decouvrir une app inerte.
 function NodePresent(): Boolean;
