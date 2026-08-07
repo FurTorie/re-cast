@@ -65,13 +65,19 @@ Les URLs concurrentes sont arbitrées par `getPriority()` :
 
 | Priorité | Motif |
 |---|---|
-| 4 | `.m3u8` |
-| 3 | `.mpd` |
-| 2 | `videoplayback` / `googlevideo` |
-| 1 | le reste |
+| 5 | `.m3u8` |
+| 4 | `.mpd` |
+| 3 | `videoplayback` / `googlevideo` |
+| 2 | le reste |
+| **1** | **playlist audio seule** (`isAudioOnlyUrl()`) |
 | **0** | **aperçus de vignettes** (`isPreviewUrl()`) |
 
-Le rang 0 n'est pas cosmétique. Sur les sites de streaming, survoler une miniature charge un vrai fichier MP4 d'aperçu par vignette. Tous les `.mp4` étant à égalité et la comparaison se faisant sur `>=`, **le dernier aperçu survolé écrasait la vraie vidéo** — on castait alors la bande-annonce d'une suggestion. C'est une dépriorisation, pas une exclusion : si la page n'offre rien d'autre, l'aperçu reste castable.
+Les deux rangs du bas ne sont pas cosmétiques. La comparaison se faisant sur `>=`, **à priorité égale le dernier vu gagne** — d'où deux façons de caster la mauvaise chose :
+
+- Sur les sites de streaming, survoler une miniature charge un vrai fichier MP4 d'aperçu par vignette. Tous les `.mp4` étant à égalité, le dernier survolé écrasait la vraie vidéo et on castait la bande-annonce d'une suggestion.
+- En HLS, une page charge sa playlist vidéo **puis** sa playlist audio. Les deux étant des `.m3u8`, la seconde écrasait la première : le cast démarrait normalement mais **il n'y avait que le son**. Cas réel observé sur `…/audio/audio.m3u8`.
+
+Dans les deux cas c'est une dépriorisation, pas une exclusion : si la page n'offre rien d'autre, ça reste castable.
 
 **Deux règles de départage à ne pas inverser :**
 

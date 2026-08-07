@@ -25,6 +25,7 @@ const agents = {
 // dans la vidéo : sans ce cache, chaque saut paie un aller-retour vers le CDN avant
 // même de commencer à charger le moindre segment.
 const manifestCache = new Map(); // clé → { body, headers, expires }
+const cacheHits = new Map();     // clé → { n, dernierLog } pour ne pas noyer la console
 const TTL_VOD  = 60000; // #EXT-X-ENDLIST présent : la playlist ne changera plus
 const TTL_LIVE = 2000;  // direct : elle évolue, on ne la garde qu'un instant
 const MAX_MANIFESTS = 40;
@@ -32,6 +33,25 @@ const MAX_MANIFESTS = 40;
 // IP de l'appareil qui nous parle, pour savoir quelle IP locale lui annoncer
 function clientIp(req) {
   return (req.socket?.remoteAddress || '').replace(/^::ffff:/, '');
+}
+
+// Un lecteur qui ne sait pas quoi faire d'une playlist la redemande en boucle :
+// des dizaines de fois par seconde. Logger chaque service depuis le cache noyait
+// la console et coûtait cher — chaque écriture est SYNCHRONE sous Windows.
+// On resserre à une ligne toutes les 5 s, avec le nombre de requêtes encaissées.
+function journaliserCacheHit(cle) {
+  const maintenant = Date.now();
+  const e = cacheHits.get(cle) || { n: 0, dernierLog: 0 };
+  e.n++;
+
+  if (maintenant - e.dernierLog >= 5000) {
+    console.log(e.n > 1
+      ? `[re:cast] Manifest servi depuis le cache (${e.n} requêtes)`
+      : '[re:cast] Manifest servi depuis le cache');
+    e.dernierLog = maintenant;
+    e.n = 0;
+  }
+  cacheHits.set(cle, e);
 }
 
 // Enregistrer un stream et retourner son URL proxy courte
@@ -142,7 +162,7 @@ function fetchAndProxy(target, referer, req, res, mode = 'samsung', attempt = 0)
   if (cacheKey) {
     const hit = manifestCache.get(cacheKey);
     if (hit && hit.expires > Date.now()) {
-      console.log('[re:cast] Manifest servi depuis le cache');
+      journaliserCacheHit(cacheKey);
       res.writeHead(200, hit.headers);
       return res.end(hit.body);
     }

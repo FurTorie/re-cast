@@ -62,12 +62,24 @@ function isPreviewUrl(url) {
   return /thumbs?[-.\/]|\/preview\.|preview\.mp4|\/sprite|\/thumb\//i.test(url);
 }
 
+// Playlist audio seule. En HLS, une page charge sa playlist vidéo PUIS sa playlist
+// audio : les deux étant des .m3u8 de même priorité, la seconde écrasait la première
+// et on castait la bande son sans image. C'est le symptôme « ça se lance mais il n'y
+// a que le son ».
+// Dépriorisé, pas exclu : sur un contenu réellement audio, ça reste castable.
+function isAudioOnlyUrl(url) {
+  const chemin = url.split(/[?#]/)[0].toLowerCase();
+  return /\.m3u8$|\.mpd$/.test(chemin)
+      && (/\/audio\//.test(chemin) || /[\/_-]audio\.(m3u8|mpd)$/.test(chemin));
+}
+
 function getPriority(url) {
   if (isPreviewUrl(url))     return 0;
-  if (url.includes('.m3u8')) return 4;
-  if (url.includes('.mpd'))  return 3;
-  if (url.includes('videoplayback') || url.includes('googlevideo')) return 2;
-  return 1;
+  if (isAudioOnlyUrl(url))   return 1;
+  if (url.includes('.m3u8')) return 5;
+  if (url.includes('.mpd'))  return 4;
+  if (url.includes('videoplayback') || url.includes('googlevideo')) return 3;
+  return 2;
 }
 
 // ─── Capture du Referer ───────────────────────────────────────────────────────

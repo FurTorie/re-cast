@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
   "name": "re:cast",
-  "version": "0.1.3",
-  "description": "Cast universel en r\u00e9solution native depuis Firefox",
+  "version": "0.1.4",
+  "description": "Cast universel en résolution native depuis Firefox",
   "browser_specific_settings": {
     "gecko": {
       "id": "recast@recast-extension",
