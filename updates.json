@@ -13,6 +13,14 @@
         {
           "version": "0.1.5",
           "update_link": "https://github.com/FurTorie/re-cast/releases/download/extension-v0.1.5/5f209c27fb6440429d81-0.1.5.xpi"
+        },
+        {
+          "version": "0.1.6",
+          "update_link": "https://github.com/FurTorie/re-cast/releases/download/extension-v0.1.6/5f209c27fb6440429d81-0.1.6.xpi"
+        },
+        {
+          "version": "0.1.7",
+          "update_link": "https://github.com/FurTorie/re-cast/releases/download/extension-v0.1.7/5f209c27fb6440429d81-0.1.7.xpi"
         }
       ]
     }

@@ -151,6 +151,14 @@ jobs:
 
       # Ce commit ne touche qu'updates.json, hors du filtre `paths` du workflow :
       # il ne peut donc pas déclencher une nouvelle exécution en boucle.
+      #
+      # Le push est RÉESSAYÉ, et ce n'est pas de la prudence gratuite. La
+      # signature AMO prend plusieurs minutes, pendant lesquelles le dépôt reçoit
+      # sans mal d'autres commits — un dépôt à trois moitiés y invite. Le push
+      # partait alors d'une base périmée et se faisait rejeter, l'étape échouait,
+      # et updates.json restait en arrière. Silencieusement : la release existait,
+      # le .xpi était bien publié, seul le fichier que Firefox interroge ne
+      # bougeait pas. Les versions 0.1.6 et 0.1.7 ont été perdues ainsi.
       - name: Committer updates.json
         if: steps.check.outputs.publier == 'oui'
         run: |
@@ -159,4 +167,15 @@ jobs:
           git add updates.json
           git diff --staged --quiet && echo "rien à committer" && exit 0
           git commit -m "updates.json : extension ${{ steps.v.outputs.version }}"
-          git push
+
+          for essai in 1 2 3 4 5; do
+            if git push; then
+              echo "updates.json poussé (essai $essai)"
+              exit 0
+            fi
+            echo "Push rejeté — rebase sur origin/main puis nouvel essai ($essai/5)"
+            git pull --rebase origin main || exit 1
+            sleep $((essai * 3))
+          done
+          echo "::error::updates.json n'a pas pu être poussé après 5 essais."
+          exit 1
