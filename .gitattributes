@@ -1,0 +1,3 @@
+# Les hooks sont des scripts sh : en CRLF, ils echouent avec « bad interpreter »
+# sur tout systeme non-Windows. Git annoncait justement la conversion.
+.githooks/* text eol=lf
