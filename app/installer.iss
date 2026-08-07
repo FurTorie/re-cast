@@ -13,13 +13,18 @@
 #define AppName "re:cast"
 #define AppExe  "Recast.exe"
 
+; Windows interdit ':' dans un nom de fichier ou de dossier. « re:cast » convient
+; pour l'affichage, mais tout ce qui touche au systeme de fichiers — dossier du
+; menu Demarrer, raccourcis — doit utiliser cette variante.
+#define SafeName "re-cast"
+
 [Setup]
 AppId={{8F3A1C74-6B2E-4D19-9A55-3E7C1D0B4A62}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher=re:cast
-DefaultDirName={autopf}\re-cast
-DefaultGroupName={#AppName}
+DefaultDirName={autopf}\{#SafeName}
+DefaultGroupName={#SafeName}
 DisableProgramGroupPage=yes
 OutputDir=..\dist
 OutputBaseFilename=recast-setup-{#AppVersion}
@@ -50,11 +55,14 @@ Source: "icon.png";          DestDir: "{app}"; Flags: ignoreversion
 ; Daemon complet, dependances comprises : l'app le lance via `node daemon\index.js`
 Source: "..\daemon\*"; DestDir: "{app}\daemon"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+; Tous ces noms deviennent des fichiers .lnk : ils utilisent SafeName, jamais
+; AppName, sous peine de « Le nom du dossier ne doit contenir aucun des
+; caracteres suivants » a l'installation.
 [Icons]
-Name: "{group}\{#AppName}";           Filename: "{app}\{#AppExe}"
-Name: "{group}\Desinstaller {#AppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#AppName}";     Filename: "{app}\{#AppExe}"; Tasks: bureau
-Name: "{userstartup}\{#AppName}";     Filename: "{app}\{#AppExe}"; Tasks: demarrage
+Name: "{group}\{#SafeName}";              Filename: "{app}\{#AppExe}"
+Name: "{group}\Desinstaller {#SafeName}"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\{#SafeName}";        Filename: "{app}\{#AppExe}"; Tasks: bureau
+Name: "{userstartup}\{#SafeName}";        Filename: "{app}\{#AppExe}"; Tasks: demarrage
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "Lancer {#AppName} maintenant"; Flags: nowait postinstall skipifsilent
