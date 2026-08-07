@@ -4,7 +4,6 @@
 
 const https = require('https');
 const http  = require('http');
-const url   = require('url');
 const crypto = require('crypto');
 const discovery = require('./discovery');
 
@@ -185,9 +184,9 @@ function streamHandler(req, res) {
 
 // Handler pour /proxy?url=... (fallback rétrocompatibilité)
 function proxyHandler(req, res) {
-  const params  = url.parse(req.url, true).query;
-  const target  = params.url;
-  const referer = params.referer;
+  // req.query est fourni par Express : inutile de ré-analyser l'URL nous-mêmes
+  const target  = req.query.url;
+  const referer = req.query.referer;
   if (!target) { res.writeHead(400); return res.end('Missing ?url='); }
   fetchAndProxy(target, referer, req, res);
 }
@@ -198,7 +197,18 @@ const MAX_ATTEMPTS = 3;
 
 // Proxy d'une URL vers le client
 function fetchAndProxy(target, referer, req, res, mode = 'samsung', attempt = 0, estSegment = false) {
-  const parsed  = url.parse(target);
+  // WHATWG URL et non url.parse() : ce dernier est déprécié (DEP0169) et émettait
+  // un avertissement à chaque requête. Il noyait le log et ressortait en rouge dans
+  // la console de l'app, puisque son texte contient le mot « errors ».
+  let parsed;
+  try {
+    parsed = new URL(target);
+  } catch {
+    console.error('[re:cast] ⚠ URL invalide :', String(target).substring(0, 90));
+    if (!res.headersSent) { res.writeHead(400); res.end('URL invalide'); }
+    return;
+  }
+
   const isHttps = parsed.protocol === 'https:';
   const lib     = isHttps ? https : http;
 
@@ -229,7 +239,7 @@ function fetchAndProxy(target, referer, req, res, mode = 'samsung', attempt = 0,
   const options = {
     hostname: parsed.hostname,
     port:     parsed.port || (isHttps ? 443 : 80),
-    path:     parsed.path,
+    path:     parsed.pathname + parsed.search,
     method:   'GET',
     agent:    isHttps ? agents.https : agents.http,
     headers: {

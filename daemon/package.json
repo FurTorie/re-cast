@@ -1,6 +1,6 @@
 {
   "name": "recast-daemon",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "re:cast local daemon - reçoit les URLs et parle aux appareils de cast",
   "main": "index.js",
   "scripts": {
