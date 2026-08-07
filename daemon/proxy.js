@@ -73,7 +73,7 @@ function journaliserCacheHit(cle) {
 // coûtait un appel système et deux écritures console synchrones PAR SEGMENT, à
 // chaque relecture du manifeste — c'est-à-dire à chaque déplacement dans la vidéo.
 function registerStream(streamUrl, referer, {
-  port = PORT, target = null, mode = 'samsung', localIp = null, quiet = false
+  port = PORT, target = null, mode = 'samsung', localIp = null, quiet = false, segment = false
 } = {}) {
   // Identifiant DÉTERMINISTE : une même URL amont donne toujours le même ID. Avec des
   // IDs aléatoires, chaque relecture du manifeste réinventait une URL par segment, ce
@@ -87,13 +87,28 @@ function registerStream(streamUrl, referer, {
   streamStore[id] = { url: streamUrl, referer, mode };
   const ip = localIp || discovery.localIpFor(target);
   // .mp4 à la fin en mode Samsung : la TV lit l'extension pour deviner le type
-  const suffix = mode === 'samsung' ? '.mp4' : '';
+  // Le suffixe .mp4 ne sert QUE sur l'URL de tête, celle remise à la TV par
+  // SetAVTransportURI : Samsung y devine le type depuis l'extension.
+  //
+  // Sur un segment il est nuisible : l'URL annoncerait du MP4 pendant que le
+  // Content-Type annonce video/mp2t, et la TV renonce devant la contradiction.
+  // Un segment garde donc sa vraie extension, pour que les deux concordent.
+  const suffix = mode !== 'samsung' ? ''
+               : segment            ? extensionDe(streamUrl)
+                                    : '.mp4';
   const proxyUrl = `http://${ip}:${port}/stream/${id}${suffix}`;
   if (!quiet) {
     console.log(`[re:cast] Stream enregistré: ${id} (${mode}) → ${streamUrl.substring(0, 60)}...`);
     console.log(`[re:cast] URL proxy courte: ${proxyUrl}`);
   }
   return proxyUrl;
+}
+
+// Extension réelle d'une URL, query string retirée
+function extensionDe(url) {
+  const chemin = String(url).split(/[?#]/)[0];
+  const m = chemin.match(/(\.[a-z0-9]{1,5})$/i);
+  return m ? m[1].toLowerCase() : '';
 }
 
 // Type réel déduit de l'URL d'origine, query string retirée — c'est elle qui fait
@@ -116,8 +131,9 @@ function guessContentType(streamUrl, upstreamType) {
 
 // Handler Express pour GET /stream/:id.mp4
 function streamHandler(req, res) {
-  // Accepter /stream/abc123 et /stream/abc123.mp4
-  const id = req.params.id.replace(/\.mp4$/i, '');
+  // Accepter /stream/abc123 comme /stream/abc123.mp4 ou .ts : l'extension n'est
+  // qu'un indice pour la TV, jamais une donnée d'identification.
+  const id = req.params.id.replace(/\.[a-z0-9]{1,5}$/i, '');
   const entry = streamStore[id];
 
   if (!entry) {
@@ -396,7 +412,8 @@ function rewriteM3u8(body, manifestUrl, referer, target = null, mode = 'samsung'
 
   const proxify = (u) => {
     count++;
-    return registerStream(absolutize(u), referer, { target, mode, localIp, quiet: true });
+    // segment: true → l'URL garde sa vraie extension, cohérente avec le Content-Type
+    return registerStream(absolutize(u), referer, { target, mode, localIp, quiet: true, segment: true });
   };
 
   const rewritten = body.split('\n').map(line => {

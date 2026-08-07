@@ -185,7 +185,9 @@ Piège à ne pas réintroduire : `server.js` exporte l'**app Express**, pas le s
 
 1. Samsung DLNA refuse HTTPS → tout stream `https://` est réenregistré derrière le proxy HTTP du daemon (`registerStream`).
 2. Samsung s'étouffe sur les URLs longues ou percent-encodées → chaque stream reçoit un ID aléatoire de 4 octets hex et un chemin court (`/stream/<id>`), stocké dans un `streamStore` (distinct de celui de l'extension, qui porte le même nom).
-3. Samsung déduit le type depuis l'extension du fichier → l'URL proxy se termine toujours par `.mp4` ; `streamHandler` retire ce suffixe avant la recherche.
+3. Samsung déduit le type depuis l'extension du fichier → **l'URL de tête**, celle remise à la TV par `SetAVTransportURI`, se termine par `.mp4`. `streamHandler` retire toute extension avant la recherche : elle n'est qu'un indice pour la TV, jamais une donnée d'identification.
+
+   **Les segments, eux, gardent leur vraie extension** (`.ts`). Leur coller `.mp4` alors que le `Content-Type` annonce `video/mp2t` créait une contradiction entre l'URL et l'en-tête, et la TV abandonnait après avoir réclamé `seg-1`. Symptôme identique au point 4 — `Client parti avant la fin` dans le log — mais cause opposée : là c'est l'en-tête qui mentait, ici c'était l'URL. Les deux doivent concorder.
 4. Samsung rejette les MIME HLS → le proxy annonce `Content-Type: video/mp4` **sur le manifeste**, plus les en-têtes `transferMode.dlna.org` / `contentFeatures.dlna.org`. Le corps peut être du vrai HLS ; à ce stade la TV ne vérifie que le MIME.
 
    **Mais le mensonge s'arrête au manifeste.** Les segments doivent être annoncés pour ce qu'ils sont (`video/mp2t` pour un `.ts`) : une fois la playlist acceptée, le démuxeur sait ce qu'il attend, et un segment TS présenté comme du MP4 le fait renoncer dès le premier. Symptôme observé : la TV réclame `seg-1`, puis referme la connexion — visible dans le log par `Client parti avant la fin`. Sur un MP4 progressif les deux branches donnent `video/mp4`, donc ce découpage ne change rien aux flux qui fonctionnaient déjà.
