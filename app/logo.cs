@@ -248,6 +248,22 @@ static class Logo
         Console.WriteLine("police : " + famille.Name);
 
         string dossier = args.Length > 0 ? args[0] : ".";
+
+        // Mode « taille:nom » : sert aux icônes de l'extension Firefox, qui a
+        // besoin des mêmes dessins sous d'autres noms et sans conteneur .ico.
+        // Une seule source pour les deux moitiés, sinon les logos divergent.
+        if (args.Length > 1)
+        {
+            for (int i = 1; i < args.Length; i++)
+            {
+                var bout = args[i].Split(':');
+                int t = int.Parse(bout[0]);
+                EcrirePng(Path.Combine(dossier, bout[1]), t);
+                Console.WriteLine("  " + bout[1] + " (" + t + " px)");
+            }
+            return 0;
+        }
+
         var tailles = new[] { 16, 20, 24, 32, 48, 64, 128, 256 };
         EcrireIco(Path.Combine(dossier, "icon.ico"), tailles);
         EcrirePng(Path.Combine(dossier, "icon.png"), 256);

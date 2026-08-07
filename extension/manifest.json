@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "re:cast",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Cast universel en résolution native depuis Firefox",
   "browser_specific_settings": {
     "gecko": {
@@ -44,9 +44,16 @@
       ]
     }
   ],
+  "icons": {
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png",
+    "128": "icons/icon-128.png"
+  },
   "browser_action": {
     "default_popup": "popup/popup.html",
     "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
       "48": "icons/icon-48.png",
       "96": "icons/icon-96.png"
     }
