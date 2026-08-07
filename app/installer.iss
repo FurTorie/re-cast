@@ -14,9 +14,12 @@
 #define AppExe  "Recast.exe"
 
 ; Windows interdit ':' dans un nom de fichier ou de dossier. « re:cast » convient
-; pour l'affichage, mais tout ce qui touche au systeme de fichiers — dossier du
-; menu Demarrer, raccourcis — doit utiliser cette variante.
-#define SafeName "re-cast"
+; pour l'affichage, mais tout ce qui touche au systeme de fichiers doit s'en passer.
+;
+; DirName : sans espace, pour un chemin d'installation sobre.
+; ShortcutName : avec espace, c'est ce que l'utilisateur lit sous l'icone.
+#define SafeName     "re-cast"
+#define ShortcutName "Re Cast"
 
 [Setup]
 AppId={{8F3A1C74-6B2E-4D19-9A55-3E7C1D0B4A62}
@@ -24,7 +27,7 @@ AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher=re:cast
 DefaultDirName={autopf}\{#SafeName}
-DefaultGroupName={#SafeName}
+DefaultGroupName={#ShortcutName}
 DisableProgramGroupPage=yes
 OutputDir=..\dist
 OutputBaseFilename=recast-setup-{#AppVersion}
@@ -58,11 +61,13 @@ Source: "..\daemon\*"; DestDir: "{app}\daemon"; Flags: ignoreversion recursesubd
 ; Tous ces noms deviennent des fichiers .lnk : ils utilisent SafeName, jamais
 ; AppName, sous peine de « Le nom du dossier ne doit contenir aucun des
 ; caracteres suivants » a l'installation.
+; IconFilename explicite : l'icone est embarquee dans l'exe, mais le preciser
+; evite tout doute quand l'explorateur a mis en cache l'ancienne icone generique.
 [Icons]
-Name: "{group}\{#SafeName}";              Filename: "{app}\{#AppExe}"
-Name: "{group}\Desinstaller {#SafeName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#SafeName}";        Filename: "{app}\{#AppExe}"; Tasks: bureau
-Name: "{userstartup}\{#SafeName}";        Filename: "{app}\{#AppExe}"; Tasks: demarrage
+Name: "{group}\{#ShortcutName}";              Filename: "{app}\{#AppExe}"; IconFilename: "{app}\{#AppExe}"
+Name: "{group}\Desinstaller {#ShortcutName}"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\{#ShortcutName}";        Filename: "{app}\{#AppExe}"; IconFilename: "{app}\{#AppExe}"; Tasks: bureau
+Name: "{userstartup}\{#ShortcutName}";        Filename: "{app}\{#AppExe}"; IconFilename: "{app}\{#AppExe}"; Tasks: demarrage
 
 [Run]
 ; Pas de skipifsilent : la mise a jour automatique installe en /SILENT et compte

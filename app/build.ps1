@@ -38,12 +38,34 @@ using System.Reflection;
 
 $sortie = Join-Path $ici 'Recast.exe'
 
+# icon.ico derive du PNG : evite de versionner un binaire de plus et garantit que
+# les deux ne divergent jamais. Genere AVANT la compilation, qui l'embarque.
+$ico = Join-Path $ici 'icon.ico'
+try {
+    Add-Type -AssemblyName System.Drawing
+    $bmp = [System.Drawing.Bitmap]::new((Join-Path $ici 'icon.png'))
+    $handle = $bmp.GetHicon()
+    $icone = [System.Drawing.Icon]::FromHandle($handle)
+    $flux = [System.IO.File]::Create($ico)
+    $icone.Save($flux)
+    $flux.Close()
+    $icone.Dispose()
+    $bmp.Dispose()
+    Write-Host "icon.ico genere"
+} catch {
+    throw "icon.ico non genere : $($_.Exception.Message)"
+}
+
 # /target:winexe : application fenetree, donc aucune console noire au lancement
 $arguments = @(
     '/nologo'
     '/target:winexe'
     '/optimize+'
     "/out:$sortie"
+    # Icone embarquee dans l'executable : sans elle, les raccourcis et
+    # l'explorateur affichent l'icone generique. SetupIconFile ne decore que
+    # l'installateur, pas l'application.
+    "/win32icon:$ico"
     '/reference:System.dll'
     '/reference:System.Drawing.dll'
     '/reference:System.Windows.Forms.dll'
@@ -59,24 +81,6 @@ Write-Host "Compilation de re:cast $version"
 if ($LASTEXITCODE -ne 0) { throw "Echec de la compilation (code $LASTEXITCODE)" }
 
 Remove-Item $infoPath -Force -ErrorAction SilentlyContinue
-
-# icon.ico pour l'installateur, derive du PNG : evite de versionner un binaire
-# de plus et garantit que les deux ne divergent jamais.
-$ico = Join-Path $ici 'icon.ico'
-try {
-    Add-Type -AssemblyName System.Drawing
-    $bmp = [System.Drawing.Bitmap]::new((Join-Path $ici 'icon.png'))
-    $handle = $bmp.GetHicon()
-    $icone = [System.Drawing.Icon]::FromHandle($handle)
-    $flux = [System.IO.File]::Create($ico)
-    $icone.Save($flux)
-    $flux.Close()
-    $icone.Dispose()
-    $bmp.Dispose()
-    Write-Host "icon.ico genere"
-} catch {
-    Write-Warning "icon.ico non genere : $($_.Exception.Message)"
-}
 
 $taille = [math]::Round((Get-Item $sortie).Length / 1KB)
 Write-Host ""

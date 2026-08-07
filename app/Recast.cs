@@ -184,10 +184,12 @@ namespace Recast
             public string Sha256;
         }
 
-        // Retourne null s'il n'y a rien de plus recent, ou en cas d'echec reseau :
-        // une mise a jour ratee ne doit jamais gener l'usage normal.
-        public static Info Chercher(Version courante)
+        // Retourne null s'il n'y a rien de plus recent, ou en cas d'echec. `erreur`
+        // distingue les deux : la verification automatique s'en moque, la
+        // verification manuelle doit pouvoir dire « a jour » plutot que rester muette.
+        public static Info Chercher(Version courante, out bool erreur)
         {
+            erreur = false;
             try
             {
                 ServicePointManager.SecurityProtocol =
@@ -204,18 +206,27 @@ namespace Recast
                 string v   = Champ(json, "version");
                 string url = Champ(json, "url");
                 string sha = Champ(json, "sha256");
-                if (v == null || url == null) return null;
+                if (v == null || url == null) { erreur = true; return null; }
 
                 Version distante;
-                if (!Version.TryParse(v.Length == 3 || v.Split('.').Length == 3 ? v + ".0" : v, out distante))
+                if (!Version.TryParse(v.Split('.').Length == 3 ? v + ".0" : v, out distante))
+                {
+                    erreur = true;
                     return null;
+                }
 
-                if (distante <= courante) return null;
-                if (!url.StartsWith(PREFIXE_AUTORISE, StringComparison.OrdinalIgnoreCase)) return null;
+                if (distante <= courante) return null;   // à jour, pas une erreur
+
+                // URL hors du depot : c'est anormal, on le signale comme une erreur
+                if (!url.StartsWith(PREFIXE_AUTORISE, StringComparison.OrdinalIgnoreCase))
+                {
+                    erreur = true;
+                    return null;
+                }
 
                 return new Info { Version = distante, Url = url, Sha256 = sha };
             }
-            catch { return null; }
+            catch { erreur = true; return null; }
         }
 
         static string Champ(string json, string nom)
@@ -298,6 +309,20 @@ namespace Recast
         MiseAJour.Info majDispo;
         bool majEnCours;
         bool portOccupe;         // le daemon a refusé de démarrer, port déjà pris
+        DateTime nodeDemarreA;   // pour distinguer « démarre » de « arrêté »
+        string dernierEtat = ""; // évite de reconstruire le menu à chaque sondage
+
+        // Le daemon met quelques secondes à écouter. Sans cet état, le menu affichait
+        // « Serveur arrêté » pendant tout ce temps, ce qui est faux et inquiétant.
+        bool DemarrageEnCours
+        {
+            get
+            {
+                return adresse == null
+                    && node != null && !node.HasExited
+                    && (DateTime.Now - nodeDemarreA).TotalSeconds < 30;
+            }
+        }
 
         public TrayApp()
         {
@@ -442,9 +467,14 @@ namespace Recast
                 };
 
                 node.Start();
+                nodeDemarreA = DateTime.Now;
                 node.BeginOutputReadLine();
                 node.BeginErrorReadLine();
                 Ajouter("[app] Daemon lancé : " + script);
+
+                // Sondage rapide le temps du démarrage, pour basculer sur « actif »
+                // dès que le serveur répond plutôt que d'attendre le cycle suivant.
+                if (sondage != null) sondage.Interval = 1000;
             }
             catch (Exception ex)
             {
@@ -495,6 +525,11 @@ namespace Recast
             if (reponse == null)
             {
                 if (adresse != null) { adresse = null; Rafraichir(); }
+
+                // Pendant le démarrage on sonde vite ; une fois la fenêtre écoulée,
+                // inutile d'interroger un serveur manifestement absent chaque seconde.
+                sondage.Interval = DemarrageEnCours ? 1000 : SONDAGE_REPOS;
+                SignalerChangementEtat();
                 return;
             }
 
@@ -513,6 +548,16 @@ namespace Recast
             if (sondage.Interval != voulu) sondage.Interval = voulu;
 
             if (change) Rafraichir();
+        }
+
+        // Le passage de « démarre » à « arrêté » n'est déclenché par aucun événement :
+        // c'est un simple délai qui s'écoule. On surveille donc l'état calculé.
+        void SignalerChangementEtat()
+        {
+            string etat = DemarrageEnCours ? "demarrage" : (adresse != null ? "actif" : "arrete");
+            if (etat == dernierEtat) return;
+            dernierEtat = etat;
+            Rafraichir();
         }
 
         static string Extraire(string source, string motif)
@@ -540,9 +585,11 @@ namespace Recast
 
         void Ajouter(string ligne)
         {
+            string entree;
             lock (verrou)
             {
-                journal.Add(DateTime.Now.ToString("HH:mm:ss") + "  " + ligne);
+                entree = DateTime.Now.ToString("HH:mm:ss") + "  " + ligne;
+                journal.Add(entree);
                 if (journal.Count > MAX_LIGNES) journal.RemoveAt(0);
                 if (ligne.IndexOf("ERREUR", StringComparison.OrdinalIgnoreCase) >= 0 ||
                     ligne.IndexOf("Error",  StringComparison.OrdinalIgnoreCase) >= 0)
@@ -558,8 +605,16 @@ namespace Recast
                 if (ui != null) ui.Post(_ => Rafraichir(), null);
             }
 
-            if (console != null && !console.IsDisposed)
-                console.BeginInvoke((Action)(() => console.Ajouter(journal[journal.Count - 1])));
+            // BeginInvoke lève tant que le handle de la fenêtre n'existe pas. Le daemon
+            // écrit en rafale au démarrage, depuis un thread de fond : ouvrir la console
+            // pile à ce moment faisait planter l'app. On vérifie donc IsHandleCreated,
+            // et on passe la ligne par valeur — relire journal[Count-1] plus tard, sur
+            // un autre thread, ne renverrait pas forcément la bonne.
+            var c = console;
+            if (c != null && !c.IsDisposed && c.IsHandleCreated)
+            {
+                try { c.BeginInvoke((Action)(() => c.Ajouter(entree))); } catch { }
+            }
         }
 
         public string[] Journal()
@@ -604,9 +659,10 @@ namespace Recast
             bool actif = adresse != null;
 
             // Statut
-            menu.Items.Add(Inerte(redemarrage ? "⏳  Redémarrage…"
-                                 : actif ? "●  Serveur actif"
-                                         : "○  Serveur arrêté"));
+            menu.Items.Add(Inerte(redemarrage           ? "⏳  Redémarrage…"
+                                 : actif                ? "●  Serveur actif"
+                                 : DemarrageEnCours     ? "⏳  Démarrage du serveur…"
+                                                        : "○  Serveur arrêté"));
 
             if (actif)
             {
@@ -680,6 +736,15 @@ namespace Recast
             demarrage.Checked = DemarrageAuto.Actif();
             demarrage.Click += (s, e) => { DemarrageAuto.Basculer(!demarrage.Checked); Rafraichir(); };
             menu.Items.Add(demarrage);
+
+            var verif = new ToolStripMenuItem("Vérifier les mises à jour");
+            verif.Enabled = !majEnCours;
+            verif.Click += (s, e) => ChercherMaj(true);
+            menu.Items.Add(verif);
+
+            menu.Items.Add(Inerte("     version " + Court(MiseAJour.Courante())));
+
+            menu.Items.Add(new ToolStripSeparator());
 
             var quitter = new ToolStripMenuItem("Quitter");
             quitter.Click += (s, e) => Quitter();
@@ -794,25 +859,58 @@ namespace Recast
 
         // ─── Mise à jour ──────────────────────────────────────────────────────
 
-        void ChercherMaj()
+        // `manuel` : déclenché par le menu, donc il faut répondre quelque chose même
+        // quand tout va bien. En automatique on reste silencieux.
+        void ChercherMaj(bool manuel = false)
         {
-            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+            ThreadPool.QueueUserWorkItem(_ =>
             {
-                var info = MiseAJour.Chercher(MiseAJour.Courante());
-                if (info == null) return;
+                bool erreur;
+                var info = MiseAJour.Chercher(MiseAJour.Courante(), out erreur);
+
                 ui.Post(__ =>
                 {
-                    if (majDispo != null && majDispo.Version >= info.Version) return;
-                    majDispo = info;
-                    Ajouter("[app] Mise à jour disponible : " + Court(info.Version));
-                    Rafraichir();
-                    try
+                    if (info == null)
                     {
-                        icone.BalloonTipTitle = "re:cast";
-                        icone.BalloonTipText = "Version " + Court(info.Version) + " disponible";
-                        icone.ShowBalloonTip(5000);
+                        if (!manuel) return;
+
+                        if (erreur)
+                        {
+                            Ajouter("[app] Vérification des mises à jour : échec.");
+                            MessageBox.Show(
+                                "Impossible de vérifier les mises à jour.\n\n" +
+                                "Vérifiez votre connexion, puis réessayez.",
+                                "re:cast", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        }
+                        else
+                        {
+                            MessageBox.Show(
+                                "re:cast est à jour.\n\nVersion installée : " +
+                                Court(MiseAJour.Courante()),
+                                "re:cast", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        }
+                        return;
                     }
-                    catch { }
+
+                    bool nouveau = majDispo == null || majDispo.Version < info.Version;
+                    majDispo = info;
+                    if (nouveau) Ajouter("[app] Mise à jour disponible : " + Court(info.Version));
+                    Rafraichir();
+
+                    if (manuel)
+                    {
+                        InstallerMaj();
+                    }
+                    else if (nouveau)
+                    {
+                        try
+                        {
+                            icone.BalloonTipTitle = "re:cast";
+                            icone.BalloonTipText = "Version " + Court(info.Version) + " disponible";
+                            icone.ShowBalloonTip(5000);
+                        }
+                        catch { }
+                    }
                 }, null);
             });
         }
@@ -991,7 +1089,14 @@ namespace Recast
 
             Controls.Add(zone);
             Controls.Add(barre);
+        }
 
+        // Le remplissage attend que la fenêtre existe : ScrollToCaret() sur un
+        // contrôle sans handle n'a pas de sens, et c'est aussi le moment où
+        // BeginInvoke devient utilisable pour les lignes qui arrivent ensuite.
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
             zone.Lines = app.Journal();
             Defiler();
         }
