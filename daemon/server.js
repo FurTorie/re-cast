@@ -7,6 +7,7 @@ const chromecast = require('./cast/chromecast');
 const dlna = require('./cast/dlna');
 const airplay = require('./cast/airplay');
 const { proxyHandler, streamHandler } = require('./proxy');
+const state = require('./state');
 
 const app = express();
 
@@ -66,9 +67,9 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// GET /status - vérifier que le daemon tourne
+// GET /status - vérifier que le daemon tourne, et ce qu'il diffuse
 app.get('/status', (req, res) => {
-  res.json({ status: 'ok', version: '0.1.0' });
+  res.json({ status: 'ok', version: '0.1.0', lecture: state.courant() });
 });
 
 // GET /devices - lister les appareils
@@ -136,6 +137,7 @@ app.post('/cast', async (req, res) => {
     }
 
     await mod.cast({ deviceId: targetId, streamUrl, referer, title });
+    state.demarre({ deviceId: targetId, deviceName: name, titre: title, url: streamUrl });
     res.json({ status: 'casting' });
   } catch (err) {
     console.error('[re:cast] Erreur cast:', err.message);
@@ -162,6 +164,7 @@ app.post('/devices/add', async (req, res) => {
 app.post('/stop', async (req, res) => {
   try {
     await Promise.all(ALL.map(m => m.stop().catch(() => {})));
+    state.arrete();
     res.json({ status: 'stopped' });
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -8,6 +8,7 @@ Le projet a deux moitiés indépendantes qui communiquent en HTTP :
 |---|---|
 | `extension/` | Add-on Firefox (Manifest V2). Détecte l'URL du flux et sert de télécommande. |
 | `daemon/` | Serveur Node local. Découvre les appareils, proxifie le flux, parle Chromecast / DLNA. |
+| `app/` | App Windows de barre des tâches. Garde le daemon vivant en arrière-plan. |
 
 **La cible principale est Firefox pour Android.** Le téléphone porte l'extension, le PC fait tourner le daemon et relaie le flux. Ce découpage n'est pas un accident : le cast étant délégué au daemon, la lecture survit au verrouillage du téléphone, à la mise en arrière-plan de Firefox et à la perte du Wi-Fi.
 
@@ -32,6 +33,32 @@ Le daemon écoute sur le port **7171**, sur toutes les interfaces — c'est la T
 ```powershell
 New-NetFirewallRule -DisplayName "re:cast daemon (7171)" -Direction Inbound -Protocol TCP -LocalPort 7171 -Action Allow -Profile Private
 ```
+
+### App Windows (recommandé)
+
+Plutôt que de garder un terminal ouvert, l'app place une icône dans la zone de notification et maintient le daemon en arrière-plan.
+
+```powershell
+.\app\build.ps1
+```
+
+```powershell
+.\app\Recast.exe
+```
+
+La compilation utilise le compilateur C# livré avec Windows — aucun SDK, aucune dépendance npm. L'exécutable pèse **16 Ko**.
+
+Le menu, au clic sur l'icône, donne :
+
+- l'état du serveur et **l'adresse IP à saisir dans l'extension**, cliquable pour la copier ;
+- la lecture en cours (appareil et protocole), avec un bouton d'arrêt ;
+- le redémarrage du serveur ;
+- la console, qui affiche la sortie du daemon et compte les erreurs ;
+- une case « Démarrer avec Windows » (clé `Run` de l'utilisateur, sans droits administrateur).
+
+**Pourquoi pas Electron :** l'app doit tourner en permanence. Electron coûterait ~180 Mo sur disque et ~150 Mo de RAM rien que pour afficher un menu. Ici l'ensemble tourne autour de 36 Mo pour l'app, plus le daemon Node. Les paquets npm de barre des tâches ont aussi été écartés : `tray-icon-node` tire 195 Mo de dépendances et son binding natif ne se charge pas sur Windows.
+
+La console lit la **sortie standard du processus Node**, pas une API : les erreurs de démarrage restent donc visibles même quand le serveur n'a jamais réussi à écouter — précisément le moment où on en a besoin.
 
 ### Extension (sur le téléphone ou le PC)
 

@@ -11,6 +11,10 @@ web-ext-artifacts/
 *.xpi
 *.zip
 
+# App Windows : l'exécutable est recompilé par app/build.ps1 en quelques secondes
+app/Recast.exe
+app/*.pdb
+
 # Identifiants AMO — ne doivent JAMAIS être commités, ils vivent dans les
 # secrets GitHub (AMO_API_KEY / AMO_API_SECRET)
 .env
