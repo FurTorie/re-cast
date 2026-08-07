@@ -28,6 +28,20 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* Borne la largeur INTRINSÈQUE du document, et c'est tout l'enjeu : un popup
+     browser_action se dimensionne sur la largeur préférée de son contenu. Une URL
+     de stream est une chaîne de 200 caractères sans espace, dont la largeur
+     préférée dépasse 1100 px — mesuré. Le popup s'étirait donc jusqu'au plafond
+     de Firefox dès qu'un flux était détecté, et la vue plein écran mobile
+     paraissait dézoomée.
+     `word-break: break-all` sur .stream-info ne suffit PAS : il autorise la
+     coupure à l'affichage sans réduire la largeur préférée. Vérifié aussi pour
+     `overflow-wrap: anywhere`. Seule une borne explicite ici y change quelque
+     chose. 420 px laisse la vue plein écran occuper tout l'écran d'un téléphone
+     (360 à 412 px), et centre le contenu au-delà. */
+  max-width: 420px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 header {
@@ -88,6 +102,9 @@ h1 {
   border-radius: 6px;
   padding: 8px;
   word-break: break-all;
+  /* Complète break-all : coupe aussi quand un seul « mot » dépasse la ligne,
+     ce qui est le cas d'une URL de stream entière. */
+  overflow-wrap: anywhere;
   font-size: 11px;
   color: #aaa;
   max-height: 50px;
