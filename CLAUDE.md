@@ -93,6 +93,25 @@ Dans les deux cas c'est une dépriorisation, pas une exclusion : si la page n'of
 
 Les URLs `blob:` et `data:` sont rejetées partout — elles ne peuvent pas être re-téléchargées depuis une autre machine. C'est aussi pourquoi le content script n'aide que sur les MP4 progressifs : en HLS/DASH via MSE, `currentSrc` est un `blob:`.
 
+### La limite infranchissable : les manifestes chiffrés
+
+**Certains sites servent un manifeste chiffré**, déchiffré côté client par leur propre lecteur JavaScript avant d'être passé à la balise vidéo. re:cast ne peut rien en faire, et aucune TV non plus : le proxy ne reçoit qu'un bloc opaque, là où un récepteur attend du HLS standard.
+
+Cas mesuré sur `fetch.flixcloud.cc` — la réponse est annoncée `application/vnd.apple.mpegurl`, répond bien `200`, et contient :
+
+```
+alphabet base64 pur : oui
+décodé              : 25 982 octets
+magic               : 34 ee 71 76 …   → aucun format connu
+entropie            : 7,77 bits/octet (8,00 = aléatoire pur)
+```
+
+Une entropie pareille ne laisse pas de doute : c'est du chiffré, pas du compressé — vérifié en forçant `Accept-Encoding: identity`, qui renvoie exactement les mêmes octets sans en-tête `Content-Encoding`. Sur ce site précis, seule la playlist **audio** est en clair, ce qui donne un cast qui « démarre » sans image.
+
+**Ne pas chercher à contourner** : il faudrait réimplémenter le déchiffrement du site, ce qui casserait à sa première mise à jour et reviendrait à défaire une protection délibérée.
+
+Le proxy détecte et signale ce cas plutôt que de s'acharner : un corps annoncé HLS qui ne commence pas par `#EXTM3U` n'est **pas réécrit**, il est servi tel quel et son début est journalisé. Auparavant, `rewriteM3u8()` s'appliquait à ces octets et produisait des « URLs proxifiées » tirées du bruit, ce qui masquait complètement la cause.
+
 `popup/popup.js` et `content/content.js` récupèrent le résultat de la même façon : `runtime.sendMessage({type: 'GET_STREAM'})`, qui résout sur l'onglet *actif*, pas sur l'émetteur.
 
 Le store est vidé lors d'une vraie navigation (`changeInfo.status === 'loading' && changeInfo.url`) — volontairement pas sur le `pushState` des SPA.

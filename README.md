@@ -128,6 +128,27 @@ Au premier lancement, renseigner **l'adresse IP du PC** dans le champ en haut du
 
 Un même téléviseur peut apparaître deux fois, une entrée par protocole. **Quand les deux sont proposées, préférer Chromecast** : HLS y est géré nativement, là où la voie DLNA repose sur des contournements du firmware Samsung.
 
+## Ce que re:cast ne peut pas caster
+
+Trois cas où l'échec vient du site, pas de l'outil. La console du daemon les signale explicitement.
+
+**Manifeste chiffré.** Certains sites servent une playlist chiffrée, déchiffrée par leur propre lecteur JavaScript avant d'atteindre la balise vidéo. Le proxy ne reçoit qu'un bloc opaque, inexploitable par une TV. Signalé par :
+
+```
+⚠ Réponse annoncée HLS mais ce n'est pas une playlist : NO5xdnU2O+z0djTjSkJEAFto…
+```
+
+Contourner supposerait de réimplémenter leur déchiffrement — cassé à leur prochaine mise à jour, et ce n'est pas le rôle de cet outil.
+
+**Refus du CDN.** Beaucoup de CDN exigent un `Referer`, parfois une IP correspondant à un jeton. Signalé par :
+
+```
+⚠ Le serveur distant refuse : HTTP 403 (text/html; charset=UTF-8)
+  Aucun Referer transmis — beaucoup de CDN refusent sans lui.
+```
+
+**Lecture chiffrée par DRM** (Widevine, PlayReady). Hors de portée par conception.
+
 ## Vérifier que le daemon répond
 
 ```bash
