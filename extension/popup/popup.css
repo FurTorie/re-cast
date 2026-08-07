@@ -107,6 +107,18 @@
   padding: 0;
 }
 
+/* `hidden` doit l'emporter sur TOUTE règle d'affichage, d'où le !important.
+   `[hidden] { display: none }` vient de la feuille du navigateur et perd donc
+   face à n'importe quelle règle d'auteur : il a suffi de `.bandeau { display:
+   flex }` pour rendre l'attribut inopérant, et le bandeau « Daemon injoignable »
+   restait affiché en permanence — y compris pastille verte à côté, puisque les
+   deux sortent de la même condition. Même piège sur le bouton « URL », en
+   `.lien-discret { display: flex }`.
+   Le popup pilote son affichage par `hidden` d'un bout à l'autre : mieux vaut
+   une règle qui couvre tout le monde qu'un correctif par classe, oublié au
+   prochain élément masquable. */
+[hidden] { display: none !important; }
+
 /* Le fond doit être sur html aussi : sur Firefox Android le popup s'ouvre en vue
    plein écran, et body ne couvre pas forcément tout l'écran. */
 html, body {
@@ -212,8 +224,6 @@ header {
   display: flex;
   flex-direction: column;
 }
-
-.vue[hidden] { display: none; }
 
 .entete-section,
 .entete-carte {
