@@ -87,15 +87,10 @@ function registerStream(streamUrl, referer, {
   streamStore[id] = { url: streamUrl, referer, mode, segment };
   const ip = localIp || discovery.localIpFor(target);
   // .mp4 à la fin en mode Samsung : la TV lit l'extension pour deviner le type
-  // Le suffixe .mp4 ne sert QUE sur l'URL de tête, celle remise à la TV par
-  // SetAVTransportURI : Samsung y devine le type depuis l'extension.
-  //
-  // Sur un segment il est nuisible : l'URL annoncerait du MP4 pendant que le
-  // Content-Type annonce video/mp2t, et la TV renonce devant la contradiction.
-  // Un segment garde donc sa vraie extension, pour que les deux concordent.
-  const suffix = mode !== 'samsung' ? ''
-               : segment            ? extensionDe(streamUrl)
-                                    : '.mp4';
+  // .mp4 sur TOUTES les URLs en mode Samsung, segments compris — voir le bloc
+  // d'en-têtes dans fetchAndProxy : la fiction MP4 doit être uniforme. Donner sa
+  // vraie extension à un segment suffit à la rompre.
+  const suffix = mode === 'samsung' ? '.mp4' : '';
   const proxyUrl = `http://${ip}:${port}/stream/${id}${suffix}`;
   if (!quiet) {
     console.log(`[re:cast] Stream enregistré: ${id} (${mode}) → ${streamUrl.substring(0, 60)}...`);
@@ -104,33 +99,41 @@ function registerStream(streamUrl, referer, {
   return proxyUrl;
 }
 
-// En-tête contentFeatures.dlna.org.
+// Sert un corps que NOUS avons produit, en honorant une éventuelle requête Range.
 //
-// DLNA.ORG_PN ne décrit pas un type MIME, il désigne un PROFIL COMPLET : conteneur,
-// codec, définition. `AVC_MP4_MP_SD_AAC_MULT5` annonce du MP4 AVC en définition
-// standard, et la TV configure son décodeur en conséquence AVANT de lire le flux.
+// À ne pas confondre avec le relais du Range vers la source : sur un manifeste, le
+// corps est réécrit, donc une plage d'octets de l'original n'aurait aucun sens.
+// Découper NOTRE corps, en revanche, est parfaitement légitime — et nécessaire.
 //
-// Sur du HLS c'est un mensonge d'une autre nature que celui du Content-Type : le
-// conteneur réel est du MPEG-TS, souvent en HD. Certaines TV redétectent et s'en
-// remettent ; d'autres font confiance au profil déclaré, montent le mauvais pipeline
-// et plantent dès la première image — symptôme « la lecture se lance et coupe
-// aussitôt », observé sur un Samsung DU7000.
-//
-// Ne rien déclarer vaut mieux que déclarer faux : sans PN, la TV analyse le contenu.
-// Les drapeaux de capacité, eux, restent — ils disent ce qu'on sait faire, pas ce
-// que contient le média.
-function profilDlna(estPlaylist) {
-  const capacites = 'DLNA.ORG_OP=01;DLNA.ORG_FLAGS=01500000000000000000000000000000';
-  return estPlaylist
-    ? capacites
-    : 'DLNA.ORG_PN=AVC_MP4_MP_SD_AAC_MULT5;' + capacites;
-}
+// Cas mesuré : un Samsung DU7000 traite le manifeste comme un fichier MP4 binaire
+// et y cherche par plages (`Range: bytes=8192-`). Tant qu'on lui répondait 200 avec
+// le corps entier depuis l'octet 0, il redemandait la même plage sans jamais
+// progresser, et la lecture ne démarrait pas.
+function servirCorps(req, res, corps, headers, statut = 200) {
+  const buf = Buffer.isBuffer(corps) ? corps : Buffer.from(corps, 'utf8');
+  const m = req.headers.range && /^bytes=(\d*)-(\d*)$/.exec(req.headers.range.trim());
 
-// Extension réelle d'une URL, query string retirée
-function extensionDe(url) {
-  const chemin = String(url).split(/[?#]/)[0];
-  const m = chemin.match(/(\.[a-z0-9]{1,5})$/i);
-  return m ? m[1].toLowerCase() : '';
+  if (!m) {
+    headers['Content-Length'] = buf.length;
+    res.writeHead(statut, headers);
+    return res.end(req.method === 'HEAD' ? undefined : buf);
+  }
+
+  const debut = m[1] ? parseInt(m[1], 10) : 0;
+  let fin     = m[2] ? parseInt(m[2], 10) : buf.length - 1;
+
+  if (debut >= buf.length) {
+    headers['Content-Range'] = `bytes */${buf.length}`;
+    res.writeHead(416, headers);
+    return res.end();
+  }
+  if (fin >= buf.length) fin = buf.length - 1;
+
+  const tranche = buf.subarray(debut, fin + 1);
+  headers['Content-Range']  = `bytes ${debut}-${fin}/${buf.length}`;
+  headers['Content-Length'] = tranche.length;
+  res.writeHead(206, headers);
+  res.end(req.method === 'HEAD' ? undefined : tranche);
 }
 
 // Type réel déduit de l'URL d'origine, query string retirée — c'est elle qui fait
@@ -213,8 +216,8 @@ function fetchAndProxy(target, referer, req, res, mode = 'samsung', attempt = 0,
     const hit = manifestCache.get(cacheKey);
     if (hit && hit.expires > Date.now()) {
       journaliserCacheHit(cacheKey);
-      res.writeHead(200, hit.headers);
-      return res.end(hit.body);
+      // Copie des en-têtes : servirCorps ajuste Content-Length et Content-Range
+      return servirCorps(req, res, hit.body, { ...hit.headers });
     }
   }
 
@@ -312,28 +315,25 @@ function fetchAndProxy(target, referer, req, res, mode = 'samsung', attempt = 0,
         }
       // Samsung DLNA : forcer video/mp4 quel que soit le contenu réel. Le corps peut
       // être du HLS, la TV ne vérifie que le MIME. Ne pas « corriger » ceci.
+      // ⚠ LA FICTION DOIT ÊTRE TOTALE ET UNIFORME.
+      //
+      // J'ai tenté quatre fois de « corriger » ce bloc en disant la vérité sur les
+      // segments — vrai Content-Type, extension .ts, pas d'en-têtes DLNA, pas de
+      // profil PN. Chaque tentative a CASSÉ une lecture qui fonctionnait.
+      //
+      // La raison : cette TV ne parse pas le HLS. Elle suit la fiction qu'on lui
+      // raconte — tout est du MP4 — et son démuxeur s'accommode d'une charge utile
+      // MPEG-TS tant que RIEN ne la contredit. Dès qu'un seul élément dit la vérité,
+      // la fiction se rompt et le lecteur perd le fil.
+      //
+      // Ne pas « réparer » l'incohérence apparente : elle est le mécanisme.
       : {
-          // Le mensonge ne porte QUE sur le manifeste : c'est lui que Samsung refuse
-          // s'il est annoncé en HLS. Les segments, eux, doivent être annoncés pour ce
-          // qu'ils sont — un .ts présenté comme du video/mp4 fait renoncer le démuxeur
-          // dès le premier segment. Sur un MP4 progressif, les deux branches donnent
-          // de toute façon video/mp4.
-          'Content-Type':                isM3u8 ? 'video/mp4' : guessContentType(target, upstreamType),
+          'Content-Type':                'video/mp4',
           'Access-Control-Allow-Origin': '*',
           'Cache-Control':               'no-cache',
-          // DLNA.ORG_OP=01 annonce le seek par octets. On l'annonçait déjà sans le
-          // gérer : la TV tentait un saut, on renvoyait le flux depuis le début, et
-          // elle rechargeait tout. Accept-Ranges + relais du Range le rendent vrai.
           'Accept-Ranges':               proxyRes.headers['accept-ranges'] || 'bytes',
-
-          // Les en-têtes DLNA décrivent LA ressource désignée à la TV, pas ses
-          // morceaux internes. Les envoyer sur un segment annonçait un profil
-          // DLNA.ORG_PN=AVC_MP4_… sur une réponse video/mp2t : la TV lisait le
-          // profil MP4, recevait du TS, et refermait dès le premier segment.
-          ...(estSegment ? {} : {
-            'transferMode.dlna.org':    'Streaming',
-            'contentFeatures.dlna.org': profilDlna(isM3u8)
-          })
+          'transferMode.dlna.org':       'Streaming',
+          'contentFeatures.dlna.org':    'DLNA.ORG_PN=AVC_MP4_MP_SD_AAC_MULT5;DLNA.ORG_OP=01;DLNA.ORG_FLAGS=01500000000000000000000000000000'
         };
 
     // Une réponse partielle doit conserver son statut 206 et sa plage, sinon le
@@ -372,7 +372,6 @@ function fetchAndProxy(target, referer, req, res, mode = 'samsung', attempt = 0,
         // segments doivent pointer vers l'interface locale qu'il sait joindre, et
         // hériter du même mode que le manifest.
         const rewritten = rewriteM3u8(body, target, referer, clientIp(req), mode);
-        headers['Content-Length'] = Buffer.byteLength(rewritten);
 
         if (cacheKey) {
           // Une playlist VOD est figée ; une playlist live évolue en continu
@@ -385,8 +384,7 @@ function fetchAndProxy(target, referer, req, res, mode = 'samsung', attempt = 0,
           });
         }
 
-        res.writeHead(proxyRes.statusCode, headers);
-        res.end(rewritten);
+        servirCorps(req, res, rewritten, headers, proxyRes.statusCode);
       });
     } else {
       if (proxyRes.headers['content-length']) {

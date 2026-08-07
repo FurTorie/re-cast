@@ -185,24 +185,23 @@ Piège à ne pas réintroduire : `server.js` exporte l'**app Express**, pas le s
 
 1. Samsung DLNA refuse HTTPS → tout stream `https://` est réenregistré derrière le proxy HTTP du daemon (`registerStream`).
 2. Samsung s'étouffe sur les URLs longues ou percent-encodées → chaque stream reçoit un ID aléatoire de 4 octets hex et un chemin court (`/stream/<id>`), stocké dans un `streamStore` (distinct de celui de l'extension, qui porte le même nom).
-3. Samsung déduit le type depuis l'extension du fichier → **l'URL de tête**, celle remise à la TV par `SetAVTransportURI`, se termine par `.mp4`. `streamHandler` retire toute extension avant la recherche : elle n'est qu'un indice pour la TV, jamais une donnée d'identification.
+3. Samsung déduit le type depuis l'extension du fichier → **toutes** les URLs proxy se terminent par `.mp4`, segments compris. `streamHandler` retire l'extension avant la recherche : elle n'est qu'un indice pour la TV, jamais une donnée d'identification.
+4. Samsung rejette les MIME HLS → le proxy annonce `Content-Type: video/mp4` et le profil `contentFeatures.dlna.org` **sur tout**, manifeste comme segments. Le corps peut être du vrai MPEG-TS ; la TV ne vérifie que ce qu'on lui déclare.
 
-   **Les segments, eux, gardent leur vraie extension** (`.ts`). Leur coller `.mp4` alors que le `Content-Type` annonce `video/mp2t` créait une contradiction entre l'URL et l'en-tête, et la TV abandonnait après avoir réclamé `seg-1`. Symptôme identique au point 4 — `Client parti avant la fin` dans le log — mais cause opposée : là c'est l'en-tête qui mentait, ici c'était l'URL. Les deux doivent concorder.
-4. Samsung rejette les MIME HLS → le proxy annonce `Content-Type: video/mp4` **sur le manifeste**, plus les en-têtes `transferMode.dlna.org` / `contentFeatures.dlna.org`. Le corps peut être du vrai HLS ; à ce stade la TV ne vérifie que le MIME.
+   **⚠ La fiction doit être TOTALE et UNIFORME. Ne pas la « réparer ».**
 
-   **Mais tout ce qui décrit le média s'arrête au manifeste.** Une fois la playlist acceptée, la TV démuxe et vérifie ce qu'elle reçoit. Trois choses doivent alors concorder sur un segment, et chacune a cassé la lecture à son tour :
+   J'ai tenté quatre fois de corriger cette incohérence apparente en disant la vérité sur les segments. Chaque tentative a **cassé une lecture qui fonctionnait** :
 
-   | Sur un segment `.ts` | Faux | Correct |
-   |---|---|---|
-   | `Content-Type` | `video/mp4` | `video/mp2t` |
-   | Extension de l'URL proxy | `.mp4` | `.ts` |
-   | En-têtes DLNA | profil `AVC_MP4_…` | **aucun** |
+   | Ce que j'ai « corrigé » | Résultat |
+   |---|---|
+   | `Content-Type` du segment → `video/mp2t` | cassé |
+   | Extension de l'URL du segment → `.ts` | cassé |
+   | En-têtes DLNA retirés des segments | cassé |
+   | `DLNA.ORG_PN` retiré du manifeste | cassé |
 
-   **Et sur le manifeste lui-même, `DLNA.ORG_PN` doit disparaître** — voir plus bas, c'est le piège le plus subtil de la chaîne.
+   La raison, mise au jour en journalisant les requêtes **entrantes** : cette TV ne parse pas le HLS. Elle demande `HEAD`, puis `GET Range: bytes=0-`, puis `Range: bytes=8192-` — elle traite le manifeste comme **un fichier MP4 binaire** et y cherche par plages d'octets. Son démuxeur s'accommode d'une charge utile MPEG-TS tant que *rien* ne contredit la fiction MP4 ; un seul élément véridique suffit à la rompre.
 
-   Le dernier est le plus contre-intuitif : `contentFeatures.dlna.org` annonce un profil **MP4** ; le poser sur une réponse `video/mp2t` fait attendre du MP4 à la TV, qui referme. Ces en-têtes décrivent **la ressource désignée à la TV**, pas ses morceaux internes — d'où le drapeau `segment` porté par `streamStore` et propagé jusqu'aux en-têtes.
-
-   Le symptôme des trois est identique : la TV réclame `seg-1` puis referme la connexion, ce que le log montre par `Client parti avant la fin`. C'est un signal de contradiction, pas de panne réseau. Sur un MP4 progressif rien ne change, puisqu'il n'y a pas de segment.
+   Corollaire : le `Range` doit être honoré **sur le manifeste lui-même**. Comme son corps est réécrit par nos soins, on ne relaie pas la plage vers la source — on découpe notre propre corps (`servirCorps()`) et on répond `206` avec le bon `Content-Range`. Tant qu'on répondait `200` depuis l'octet 0, la TV redemandait la même plage sans jamais progresser.
 5. Les manifests HLS sont réécrits ligne par ligne par `rewriteM3u8()` — chaque URL de segment est résolue en absolu puis réenregistrée avec son propre ID court, pour que les entrées de playlist passent aussi par le proxy avec le `Referer` d'origine.
 6. Le cast se fait en deux niveaux : `castViaLibrary()` (fork jaruba de `upnp-mediarenderer-client`, qui gère la particularité EUPNP de Samsung) d'abord, puis `castViaSoap()` écrit à la main en secours.
 7. `castViaSoap()` essaie **quatre** variantes de metadata `SetAVTransportURI` dans l'ordre (protocolInfo DLNA complet → simplifié → sans metadata → MIME HLS), le comportement variant selon le firmware.
@@ -210,18 +209,6 @@ Piège à ne pas réintroduire : `server.js` exporte l'**app Express**, pas le s
 
 Toucher au forçage du MIME, au suffixe `.mp4` ou au schéma d'IDs courts casse la lecture Samsung.
 
-### `DLNA.ORG_PN` : le mensonge à ne PAS faire
-
-`Content-Type` et `DLNA.ORG_PN` n'ont pas la même portée, et c'est ce qui rend ce piège coûteux à trouver.
-
-- `Content-Type: video/mp4` est un **indice** que Samsung utilise pour accepter la ressource. Le mensonge y est nécessaire.
-- `DLNA.ORG_PN=AVC_MP4_MP_SD_AAC_MULT5` désigne un **profil complet** : conteneur MP4, codec AVC Main Profile, définition SD. La TV **configure son pipeline de décodage à partir de cette déclaration, avant même de lire le flux**.
-
-Sur du HLS, ce profil est faux sur les trois axes — le conteneur réel est du MPEG-TS, souvent en HD. Certaines TV redétectent et s'en remettent ; d'autres montent le mauvais pipeline et **plantent dès la première image**. Symptôme : « la lecture se lance et coupe instantanément, sans jamais afficher d'image ». Mesuré sur un Samsung DU7000, là où un Q70F ne bronchait pas.
-
-`profilDlna()` ne déclare donc **aucun PN pour une playlist**, et conserve les drapeaux de capacité (`DLNA.ORG_OP=01`, `DLNA.ORG_FLAGS`) : ceux-là décrivent ce que *le serveur* sait faire, pas ce que contient le média. Ne rien déclarer vaut mieux que déclarer faux — sans PN, la TV analyse le contenu elle-même.
-
-Le PN reste sur un MP4 progressif, où il est au moins exact quant au conteneur.
 
 ### Performance du proxy : cinq pièges déjà payés
 
