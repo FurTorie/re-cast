@@ -85,7 +85,7 @@ Le menu, au clic sur l'icône, donne :
 - l'état du serveur et **l'adresse IP à saisir dans l'extension**, cliquable pour la copier ;
 - la lecture en cours (appareil et protocole), avec un bouton d'arrêt ;
 - le redémarrage du serveur ;
-- la console, qui affiche la sortie du daemon et compte les erreurs ;
+- la console, qui affiche la sortie du daemon en couleurs et compte les erreurs ;
 - une case « Démarrer avec Windows » (clé `Run` de l'utilisateur, sans droits administrateur).
 
 **Pourquoi pas Electron :** l'app doit tourner en permanence. Electron coûterait ~180 Mo sur disque et ~150 Mo de RAM rien que pour afficher un menu. Les paquets npm de barre des tâches ont aussi été écartés : `tray-icon-node` tire 195 Mo de dépendances et son binding natif ne se charge pas sur Windows.
@@ -127,6 +127,29 @@ Au premier lancement, renseigner **l'adresse IP du PC** dans le champ en haut du
 3. Choisir un appareil, puis « Caster ». L'étoile ★ garde l'appareil en mémoire, le crayon ✏️ lui donne un surnom.
 
 Un même téléviseur peut apparaître deux fois, une entrée par protocole. **Quand les deux sont proposées, préférer Chromecast** : HLS y est géré nativement, là où la voie DLNA repose sur des contournements du firmware Samsung.
+
+## Signaler un bug
+
+La console de l'app a un bouton **« Copier le rapport »**. Il produit un texte prêt à coller, avec les versions des trois moitiés en tête :
+
+```
+═══ re:cast — rapport ═══
+date       : 2026-08-07 14:52:10
+app        : 0.1.14
+daemon     : 0.1.8
+extension  : 0.1.6
+Windows    : 10.0.28000.0 64 bits
+adresse    : 192.168.1.16:7171
+lecture    : 85" QLED (CHROMECAST)
+erreurs    : 0
+
+═══ journal ═══
+…
+```
+
+Sans cet en-tête, un log ne dit pas s'il porte sur du code déjà corrigé — c'est la première question devant un rapport. Les versions du daemon et de l'extension viennent de `GET /status` ; l'extension annonce la sienne via l'en-tête `X-Recast-Extension` à chaque requête.
+
+Le log est **coloré par gravité** : rouge pour les erreurs, jaune pour les bannières de version, cyan pour les requêtes **entrantes** (ce que demande la TV), bleu pour les **sortantes** (ce qu'on va chercher au CDN), vert pour les succès. Distinguer entrant et sortant est le premier réflexe de diagnostic — c'est ce qui a permis de comprendre qu'une TV byte-seekait dans un manifeste.
 
 ## Ce que re:cast ne peut pas caster
 

@@ -2,6 +2,11 @@
 
 const DEFAULT_DAEMON = 'http://192.168.1.14:7171';
 
+// Envoyée à chaque requête : le daemon la journalise, pour qu'un rapport de bug
+// indique quelle version de chaque moitié tournait.
+const VERSION = browser.runtime.getManifest().version;
+const ENTETES = { 'X-Recast-Extension': VERSION };
+
 let DAEMON_URL = DEFAULT_DAEMON;
 let currentStream = null;
 let selectedId = null;
@@ -112,7 +117,7 @@ async function saveDaemonUrl() {
 async function checkDaemonStatus() {
   const dot = document.getElementById('daemon-status');
   try {
-    const res = await fetch(`${DAEMON_URL}/status`, { signal: AbortSignal.timeout(2500) });
+    const res = await fetch(`${DAEMON_URL}/status`, { headers: ENTETES, signal: AbortSignal.timeout(2500) });
     if (!res.ok) throw new Error('status');
     dot.className = 'status-dot online';
     dot.title = 'Daemon connecté';
@@ -129,7 +134,7 @@ async function checkDaemonStatus() {
 async function refreshFromDaemon({ scan }) {
   const url = `${DAEMON_URL}/devices${scan ? '?scan=1' : ''}`;
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(scan ? 15000 : 4000) });
+    const res = await fetch(url, { headers: ENTETES, signal: AbortSignal.timeout(scan ? 15000 : 4000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const devices = await res.json();
     live = Array.isArray(devices) ? devices : [];
@@ -367,7 +372,7 @@ async function onAddManual() {
   try {
     const res = await fetch(`${DAEMON_URL}/devices/add`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...ENTETES },
       body: JSON.stringify({ ip, name }),
       signal: AbortSignal.timeout(15000)
     });
@@ -411,7 +416,7 @@ async function onCast() {
   try {
     const res = await fetch(`${DAEMON_URL}/cast`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...ENTETES },
       body: JSON.stringify({
         deviceId:  device.id,
         streamUrl: currentStream.url,
@@ -439,7 +444,7 @@ async function onCast() {
 }
 
 async function onStop() {
-  try { await fetch(`${DAEMON_URL}/stop`, { method: 'POST' }); } catch {}
+  try { await fetch(`${DAEMON_URL}/stop`, { method: 'POST', headers: ENTETES }); } catch {}
   document.getElementById('btn-cast').textContent = '📡 Caster';
   document.getElementById('btn-cast').disabled = false;
   document.getElementById('btn-stop').style.display = 'none';

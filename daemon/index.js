@@ -14,6 +14,7 @@ const airplay    = require('./cast/airplay');
 
 const SCANNERS = [chromecast, dlna, airplay];
 
+const VERSION = require('./package.json').version;
 const PORT = 7171;
 const INTERVALLE_RESCAN = 60000;
 
@@ -43,6 +44,10 @@ function start({ port = PORT } = {}) {
       await discovery.resolvePreferred();
       const localIp = journaliserInterfaces();
 
+      // Bannière de version en tête de log : sans elle, un rapport de bug ne dit
+      // pas sur quelle version il porte, et on ne peut pas savoir si c'est déjà
+      // corrigé. C'est la première chose à lire dans un log.
+      console.log(`[re:cast] ═══ daemon ${VERSION} · Node ${process.version} · ${process.platform} ═══`);
       console.log(`[re:cast] Daemon démarré sur http://localhost:${port}`);
       console.log(`[re:cast] Accessible sur le réseau local : http://${localIp}:${port}`);
       console.log('[re:cast] En attente de commandes depuis l\'extension Firefox...');

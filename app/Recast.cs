@@ -364,6 +364,8 @@ namespace Recast
         MiseAJour.Info majDispo;
         bool majEnCours;
         bool portOccupe;         // le daemon a refusé de démarrer, port déjà pris
+        string versionDaemon;    // lues dans /status, pour les rapports de bug
+        string versionExtension;
         DateTime nodeDemarreA;   // pour distinguer « démarre » de « arrêté »
         string dernierEtat = ""; // évite de reconstruire le menu à chaque sondage
 
@@ -612,6 +614,22 @@ namespace Recast
             string proto = Extraire(reponse, "\"protocole\"\\s*:\\s*\"([^\"]*)\"");
             string ip    = Extraire(reponse, "\"ip\"\\s*:\\s*\"([^\"]*)\"");
 
+            // Versions des deux autres moitiés, annoncées par le daemon. Sans ça, un
+            // rapport de bug ne dit pas ce qui tournait, et on ne peut pas savoir si
+            // le problème est déjà corrigé.
+            string vd = Extraire(reponse, "\"version\"\\s*:\\s*\"([^\"]*)\"");
+            string ve = Extraire(reponse, "\"extension\"\\s*:\\s*\"([^\"]*)\"");
+            if (vd != null && vd != versionDaemon)
+            {
+                versionDaemon = vd;
+                Ajouter("[app] ═══ daemon " + vd + " ═══");
+            }
+            if (ve != null && ve != versionExtension)
+            {
+                versionExtension = ve;
+                Ajouter("[app] ═══ extension " + ve + " ═══");
+            }
+
             // L'adresse vient désormais du serveur lui-même. Avant, on la relisait
             // dans les logs et on retombait sur « localhost » quand ils n'étaient pas
             // les nôtres — adresse inutilisable depuis le téléphone.
@@ -705,6 +723,27 @@ namespace Recast
         public string[] Journal()
         {
             lock (verrou) return journal.ToArray();
+        }
+
+        // Rapport de bug prêt à coller : les versions des trois moitiés en tête, puis
+        // le journal. Sans l'en-tête, impossible de dire si un log porte sur du code
+        // déjà corrigé — c'est la première question devant un rapport.
+        public string Rapport()
+        {
+            var b = new StringBuilder();
+            b.AppendLine("═══ re:cast — rapport ═══");
+            b.AppendLine("date       : " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+            b.AppendLine("app        : " + Court(MiseAJour.Courante()));
+            b.AppendLine("daemon     : " + (versionDaemon ?? "inconnu (serveur jamais joint)"));
+            b.AppendLine("extension  : " + (versionExtension ?? "inconnue (jamais connectée)"));
+            b.AppendLine("Windows    : " + Environment.OSVersion.Version + " " + (Environment.Is64BitOperatingSystem ? "64 bits" : "32 bits"));
+            b.AppendLine("adresse    : " + (adresse ?? "—"));
+            b.AppendLine("lecture    : " + (string.IsNullOrEmpty(lectureNom) ? "aucune" : lectureNom + " (" + lectureProto + ")"));
+            b.AppendLine("erreurs    : " + nbErreurs);
+            b.AppendLine();
+            b.AppendLine("═══ journal ═══");
+            foreach (string l in Journal()) b.AppendLine(l);
+            return b.ToString();
         }
 
         public void ViderJournal()
@@ -954,15 +993,24 @@ namespace Recast
         // quand tout va bien. En automatique on reste silencieux.
         void ChercherMaj(bool manuel = false)
         {
+            // Journalisé même en automatique : sans trace, impossible de savoir si la
+            // vérification a lieu. C'est ce qui donnait l'impression qu'elle n'existait
+            // qu'en manuel.
+            Ajouter("[app] Vérification des mises à jour" + (manuel ? " (manuelle)…" : " (automatique)…"));
+
             ThreadPool.QueueUserWorkItem(_ =>
             {
                 bool erreur;
                 var info = MiseAJour.Chercher(MiseAJour.Courante(), out erreur);
 
-                ui.Post(__ =>
+                Post(() =>
                 {
                     if (info == null)
                     {
+                        Ajouter(erreur
+                            ? "[app] Vérification impossible (réseau ou API GitHub)."
+                            : "[app] À jour — version " + Court(MiseAJour.Courante()) + ".");
+
                         if (!manuel) return;
 
                         if (erreur)
@@ -1002,8 +1050,18 @@ namespace Recast
                         }
                         catch { }
                     }
-                }, null);
+                });
             });
+        }
+
+        // Repasser sur le thread d'interface. SynchronizationContext.Current peut être
+        // null au moment de sa capture — aucun handle de fenêtre n'existe encore — et
+        // un ui.Post sur null lèverait une NullReferenceException depuis un thread de
+        // fond, ce qui tue le processus sans rien afficher.
+        void Post(Action action)
+        {
+            if (ui != null) ui.Post(_ => action(), null);
+            else action();
         }
 
         void InstallerMaj()
@@ -1018,7 +1076,7 @@ namespace Recast
             System.Threading.ThreadPool.QueueUserWorkItem(_ =>
             {
                 string fichier = MiseAJour.Telecharger(info);
-                ui.Post(__ =>
+                Post(() =>
                 {
                     majEnCours = false;
 
@@ -1066,7 +1124,7 @@ namespace Recast
                     }
 
                     Quitter();
-                }, null);
+                });
             });
         }
 
@@ -1141,38 +1199,45 @@ namespace Recast
     class ConsoleForm : Form
     {
         readonly TrayApp app;
-        readonly TextBox zone;
+        readonly RichTextBox zone;   // RichTextBox et non TextBox : lui seul colore
 
         public ConsoleForm(TrayApp app)
         {
             this.app = app;
 
             Text = "re:cast — console";
-            Width = 900;
-            Height = 560;
+            Width = 980;
+            Height = 600;
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = Color.FromArgb(26, 26, 46);
 
-            zone = new TextBox
+            zone = new RichTextBox
             {
-                Multiline = true,
                 ReadOnly = true,
-                ScrollBars = ScrollBars.Both,
                 WordWrap = false,
                 Dock = DockStyle.Fill,
                 BackColor = Color.FromArgb(22, 33, 62),
-                ForeColor = Color.FromArgb(220, 220, 230),
+                ForeColor = Color.FromArgb(205, 210, 225),
                 Font = new Font("Consolas", 9f),
-                BorderStyle = BorderStyle.None
+                BorderStyle = BorderStyle.None,
+                DetectUrls = false,
+                ScrollBars = RichTextBoxScrollBars.Both
             };
 
-            var barre = new Panel { Dock = DockStyle.Bottom, Height = 38, BackColor = Color.FromArgb(26, 26, 46) };
+            var barre = new Panel { Dock = DockStyle.Bottom, Height = 40, BackColor = Color.FromArgb(26, 26, 46) };
 
-            barre.Controls.Add(Bouton("Copier tout", 10, (s, e) =>
+            // Le bouton qui compte pour un rapport de bug : versions en tête, log
+            // ensuite. Sans les versions, un log ne dit pas s'il porte sur du code
+            // déjà corrigé.
+            barre.Controls.Add(Bouton("Copier le rapport", 10, 150, (s, e) =>
+            {
+                try { Clipboard.SetText(app.Rapport()); } catch { }
+            }));
+            barre.Controls.Add(Bouton("Copier le log", 170, 120, (s, e) =>
             {
                 try { Clipboard.SetText(zone.Text); } catch { }
             }));
-            barre.Controls.Add(Bouton("Vider", 130, (s, e) =>
+            barre.Controls.Add(Bouton("Vider", 300, 90, (s, e) =>
             {
                 app.ViderJournal();
                 zone.Clear();
@@ -1188,18 +1253,19 @@ namespace Recast
         protected override void OnShown(EventArgs e)
         {
             base.OnShown(e);
-            zone.Lines = app.Journal();
-            Defiler();
+            zone.SuspendLayout();
+            foreach (string l in app.Journal()) Ajouter(l);
+            zone.ResumeLayout();
         }
 
-        Button Bouton(string texte, int x, EventHandler action)
+        Button Bouton(string texte, int x, int largeur, EventHandler action)
         {
             var b = new Button
             {
                 Text = texte,
                 Left = x,
-                Top = 6,
-                Width = 110,
+                Top = 7,
+                Width = largeur,
                 Height = 26,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(15, 52, 96),
@@ -1210,15 +1276,64 @@ namespace Recast
             return b;
         }
 
-        public void Ajouter(string ligne)
+        // La couleur porte le niveau de gravité : on repère une erreur au milieu de
+        // centaines de lignes sans les lire. Les requêtes entrantes ont leur teinte
+        // propre, car les distinguer des requêtes sortantes est le premier réflexe
+        // de diagnostic.
+        static Color CouleurDe(string ligne)
         {
-            zone.AppendText(ligne + Environment.NewLine);
+            if (ligne.Contains("⚠") || ligne.IndexOf("ERREUR", StringComparison.OrdinalIgnoreCase) >= 0
+                                     || ligne.IndexOf("Error", StringComparison.OrdinalIgnoreCase) >= 0
+                                     || ligne.IndexOf("échec", StringComparison.OrdinalIgnoreCase) >= 0
+                                     || ligne.IndexOf("impossible", StringComparison.OrdinalIgnoreCase) >= 0)
+                return Color.FromArgb(255, 105, 97);                      // rouge
+
+            if (ligne.Contains("═══"))          return Color.FromArgb(255, 214, 102);  // jaune : versions
+            if (ligne.Contains("← "))           return Color.FromArgb(120, 220, 232);  // cyan : entrant
+            if (ligne.Contains("Segment (") ||
+                ligne.Contains("Fetch ("))      return Color.FromArgb(150, 190, 255);  // bleu : sortant
+            if (ligne.Contains("[app]"))        return Color.FromArgb(150, 155, 175);  // gris : app
+
+            if (ligne.IndexOf("démarré", StringComparison.OrdinalIgnoreCase) >= 0
+             || ligne.IndexOf("découvert", StringComparison.OrdinalIgnoreCase) >= 0
+             || ligne.IndexOf("lecture démarrée", StringComparison.OrdinalIgnoreCase) >= 0)
+                return Color.FromArgb(126, 217, 138);                     // vert : succès
+
+            if (ligne.Contains("Client parti") || ligne.Contains("cache"))
+                return Color.FromArgb(190, 170, 220);                     // violet : nuance
+
+            return zoneDefaut;
         }
 
-        void Defiler()
+        static readonly Color zoneDefaut = Color.FromArgb(205, 210, 225);
+
+        public void Ajouter(string ligne)
         {
+            // L'heure reste toujours en gris : elle ne doit pas concurrencer le
+            // message du regard.
+            int coupe = (ligne.Length > 8 && ligne[2] == ':' && ligne[5] == ':') ? 8 : 0;
+
+            if (coupe > 0)
+            {
+                Ecrire(ligne.Substring(0, coupe), Color.FromArgb(110, 115, 135));
+                Ecrire(ligne.Substring(coupe) + Environment.NewLine, CouleurDe(ligne));
+            }
+            else
+            {
+                Ecrire(ligne + Environment.NewLine, CouleurDe(ligne));
+            }
+
             zone.SelectionStart = zone.TextLength;
             zone.ScrollToCaret();
+        }
+
+        void Ecrire(string texte, Color couleur)
+        {
+            zone.SelectionStart = zone.TextLength;
+            zone.SelectionLength = 0;
+            zone.SelectionColor = couleur;
+            zone.AppendText(texte);
+            zone.SelectionColor = zone.ForeColor;
         }
     }
 }

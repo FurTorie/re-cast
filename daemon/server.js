@@ -27,6 +27,22 @@ function moduleFor(deviceId) {
 
 const ALL = Object.values(MODULES);
 
+const VERSION = require('./package.json').version;
+
+// Version de l'extension, apprise à sa première requête. Elle n'apparaît nulle
+// part ailleurs, et sans elle un rapport de bug ne dit pas quelle moitié tourne
+// avec quelle version — impossible de savoir si c'est déjà corrigé.
+let versionExtension = null;
+
+app.use((req, res, next) => {
+  const v = req.headers['x-recast-extension'];
+  if (v && v !== versionExtension) {
+    versionExtension = v;
+    console.log(`[re:cast] ═══ extension ${v} connectée ═══`);
+  }
+  next();
+});
+
 // ─── Routes média ─────────────────────────────────────────────────────────────
 // Déclarées AVANT la politique CORS stricte, et volontairement hors de son champ :
 // le client n'est pas ici l'extension mais la TV ou le récepteur Chromecast. Ce
@@ -76,11 +92,12 @@ app.get('/status', (req, res) => {
     // `app` sert de signature : l'app de bureau s'en sert pour reconnaître un
     // daemon re:cast lancé en dehors d'elle, et le traiter comme fonctionnel
     // plutôt que comme un programme tiers qui squatte le port.
-    app:     're:cast',
-    status:  'ok',
-    version: '0.1.0',
-    ip:      discovery.localIpFor(),
-    lecture: state.courant()
+    app:       're:cast',
+    status:    'ok',
+    version:   VERSION,
+    extension: versionExtension,
+    ip:        discovery.localIpFor(),
+    lecture:   state.courant()
   });
 });
 
