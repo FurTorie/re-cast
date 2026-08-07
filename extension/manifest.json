@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "re:cast",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Caster la vidéo d'un onglet vers une TV Chromecast, DLNA ou AirPlay, en résolution native. Nécessite le daemon re:cast sur un PC du réseau.",
   "browser_specific_settings": {
     "gecko": {
@@ -38,9 +38,6 @@
       ],
       "js": [
         "content/content.js"
-      ],
-      "css": [
-        "content/content.css"
       ]
     }
   ],

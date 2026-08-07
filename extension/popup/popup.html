@@ -8,47 +8,160 @@
 </head>
 <body>
   <div id="app">
+
     <header>
-      <h1>re:cast</h1>
-      <span id="daemon-status" class="status-dot offline" title="Daemon hors ligne"></span>
+      <span class="marque">re<span class="marque-sep">:</span>cast</span>
+      <!-- La pastille est l'entrée UNIQUE vers la gestion des serveurs : elle en
+           montre l'état (point vert / orange) et le nom du serveur actif. -->
+      <button id="btn-serveurs" class="pastille" title="Gérer les serveurs re:cast">
+        <span id="pastille-point" class="pastille-point"></span>
+        <span id="pastille-nom">…</span>
+        <span class="ico" data-ico="chevron-droite"></span>
+      </button>
     </header>
 
-    <div id="daemon-config">
-      <input id="daemon-ip-input" type="text" placeholder="IP du daemon (ex: 192.168.1.14:7171)" />
-      <button id="btn-detect-daemon" title="Chercher le daemon sur le réseau">🔎</button>
-      <button id="btn-save-daemon" title="Enregistrer l'adresse du daemon">✓</button>
+    <!-- Bandeau d'alerte, visible sur la vue principale uniquement -->
+    <div id="bandeau-injoignable" class="bandeau" hidden>
+      <span class="bandeau-titre">Daemon injoignable</span>
+      <p class="bandeau-texte">Le serveur sélectionné ne répond pas. Choisis-en un autre, ou lance une détection.</p>
+      <button id="btn-reparer" class="bandeau-action">Gérer les serveurs</button>
     </div>
-    <p id="daemon-hint" class="daemon-hint" hidden></p>
 
-    <section id="stream-section">
-      <p class="label">Stream détecté</p>
-      <div id="stream-info" class="stream-info">
-        <span id="stream-url">Aucun stream détecté</span>
+    <!-- ── Vue : serveurs re:cast ─────────────────────────────────────────── -->
+    <section id="vue-serveurs" class="vue" hidden>
+      <div class="entete-section">
+        <span class="titre-section">Serveurs re:cast</span>
+        <button class="lien-retour" data-retour="principale">
+          <span class="ico" data-ico="chevron-gauche"></span>Retour
+        </button>
+      </div>
+
+      <ul id="liste-serveurs" class="liste"></ul>
+
+      <button id="btn-ouvrir-ajout-serveur" class="ligne-pointillee">
+        <span class="ico" data-ico="plus"></span>Ajouter un serveur manuellement
+      </button>
+
+      <p class="aide">Les serveurs restent enregistrés&nbsp;: re:cast bascule sur celui qui répond quand tu changes de réseau.</p>
+
+      <p id="detect-hint" class="aide" hidden></p>
+
+      <div class="pied">
+        <button id="btn-detecter" class="btn-secondaire">
+          <span class="ico" data-ico="loupe" data-taille="15"></span><span id="detect-label">Détecter sur le réseau</span>
+        </button>
       </div>
     </section>
 
-    <section id="devices-section">
-      <div class="section-head">
-        <p class="label">Appareils</p>
-        <button id="btn-scan" class="btn-mini">🔍 Rechercher</button>
+    <!-- ── Vue : ajout d'un serveur ───────────────────────────────────────── -->
+    <section id="vue-ajout-serveur" class="vue" hidden>
+      <div class="entete-section">
+        <span class="titre-section">Ajouter un serveur</span>
+        <button class="lien-retour" data-retour="serveurs">
+          <span class="ico" data-ico="chevron-gauche"></span>Retour
+        </button>
       </div>
-      <ul id="device-list">
-        <li class="loading">Chargement…</li>
-      </ul>
 
-      <details id="manual-add-wrap">
-        <summary>+ Ajouter par IP</summary>
-        <div id="manual-add">
-          <input id="manual-ip" type="text" placeholder="IP (ex: 192.168.1.10)" />
-          <input id="manual-name" type="text" placeholder="Nom (optionnel)" />
-          <button id="btn-add-manual">Ajouter et enregistrer</button>
-          <p id="manual-msg"></p>
+      <div class="champs">
+        <input id="serveur-nom" type="text" placeholder="Nom du lieu (ex : Appartement)">
+        <input id="serveur-url" type="text" class="mono" placeholder="192.168.1.20:7171">
+        <p id="serveur-msg" class="msg" hidden></p>
+        <p class="aide">Le port 7171 est ajouté s'il manque. Utile quand le daemon tourne sur une machine qui ne répond pas au balayage — un serveur distant, ou un autre sous-réseau.</p>
+      </div>
+
+      <div class="pied">
+        <button id="btn-ajouter-serveur" class="btn-primaire">
+          <span class="ico" data-ico="plus" data-taille="16"></span>Enregistrer ce serveur
+        </button>
+      </div>
+    </section>
+
+    <!-- ── Vue principale ─────────────────────────────────────────────────── -->
+    <section id="vue-principale" class="vue">
+      <div class="carte">
+        <div class="entete-carte">
+          <span class="titre-section">Flux détecté</span>
+          <button id="btn-url" class="lien-discret">
+            URL<span class="ico" id="url-chevron" data-ico="chevron-bas"></span>
+          </button>
         </div>
-      </details>
+        <div class="flux-ligne">
+          <span id="flux-type" class="badge" hidden></span>
+          <span id="flux-domaine" class="flux-domaine">Aucun flux détecté</span>
+        </div>
+        <p id="flux-url" class="flux-url" hidden></p>
+      </div>
+
+      <div class="entete-section">
+        <span class="titre-section">Appareils</span>
+        <button id="btn-rechercher" class="lien-accent">
+          <span class="ico" data-ico="loupe"></span><span id="rechercher-label">Rechercher</span>
+        </button>
+      </div>
+
+      <p id="flash" class="flash" hidden></p>
+
+      <ul id="liste-appareils" class="liste"></ul>
+
+      <button id="btn-ouvrir-ajout-appareil" class="ligne-pointillee">
+        <span class="ico" data-ico="plus"></span>Ajouter un appareil par son IP
+      </button>
+
+      <div class="pied">
+        <button id="btn-caster" class="btn-primaire" disabled>
+          <span class="ico" data-ico="cast"></span><span id="caster-label">Choisis un appareil</span>
+        </button>
+      </div>
     </section>
 
-    <button id="btn-cast" disabled>📡 Caster</button>
-    <button id="btn-stop" style="display:none">⏹ Arrêter</button>
+    <!-- ── Vue : ajout d'un appareil par IP ───────────────────────────────── -->
+    <section id="vue-ajout-appareil" class="vue" hidden>
+      <div class="entete-section">
+        <span class="titre-section">Ajouter un appareil</span>
+        <button class="lien-retour" data-retour="principale">
+          <span class="ico" data-ico="chevron-gauche"></span>Retour
+        </button>
+      </div>
+
+      <div class="champs">
+        <input id="appareil-ip" type="text" class="mono" placeholder="192.168.1.10">
+        <input id="appareil-nom" type="text" placeholder="Nom (optionnel)">
+        <p id="appareil-msg" class="msg" hidden></p>
+        <p class="aide">L'appareil est gardé en local même si la TV est éteinte&nbsp;: le daemon resondera l'IP au moment de caster.</p>
+      </div>
+
+      <div class="pied">
+        <button id="btn-ajouter-appareil" class="btn-primaire">
+          <span class="ico" data-ico="plus" data-taille="16"></span><span id="ajout-appareil-label">Ajouter et enregistrer</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ── Vue : lecture en cours ─────────────────────────────────────────── -->
+    <section id="vue-lecture" class="vue" hidden>
+      <div class="carte-lecture">
+        <div class="lecture-etat">
+          <span class="lecture-point"></span>
+          <span class="titre-section accent">En lecture</span>
+        </div>
+        <div class="lecture-cible">
+          <span id="lecture-nom" class="lecture-nom">—</span>
+          <span id="lecture-meta" class="lecture-meta"></span>
+        </div>
+        <div class="flux-ligne">
+          <span id="lecture-type" class="badge" hidden></span>
+          <span id="lecture-source" class="lecture-source"></span>
+        </div>
+      </div>
+
+      <div class="pied colonne">
+        <button id="btn-arreter" class="btn-secondaire danger">
+          <span class="ico" data-ico="stop"></span>Arrêter la lecture
+        </button>
+        <button id="btn-changer" class="lien-discret centre">Changer d'appareil</button>
+      </div>
+    </section>
+
   </div>
   <script src="popup.js"></script>
 </body>

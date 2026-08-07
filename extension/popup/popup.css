@@ -1,4 +1,105 @@
-/* re:cast - popup.css */
+/* re:cast - popup.css
+   Design issu de la maquette Claude Design (design/project/re-cast.dc.html).
+
+   Un seul jeu de règles, deux thèmes : toutes les couleurs passent par des
+   variables, et `prefers-color-scheme` bascule l'ensemble. La maquette présente
+   les deux thèmes côte à côte pour les comparer — dans le produit c'est le
+   réglage du système qui tranche, il n'y a donc pas d'interrupteur.
+
+   La maquette est dessinée en Archivo / IBM Plex Mono (Google Fonts). Un popup
+   d'extension ne peut pas aller chercher une police distante — la CSP l'interdit
+   et le popup doit s'ouvrir hors ligne. On reste donc sur la pile système, qui
+   donne Roboto sur Android et Segoe UI sur Windows : deux grotesques proches du
+   dessin d'Archivo. */
+
+:root {
+  --fond:            #141519;
+  --texte:           #f2f2f5;
+  --texte-2:         #848494;   /* titres de section, libellés discrets */
+  --texte-3:         #6e6e80;   /* textes d'aide */
+  --meta:            #9a9aa8;   /* seconde ligne d'une carte */
+
+  --accent:          #e8503f;
+  --accent-clair:    #ff8f80;   /* accent lisible sur fond sombre */
+  --accent-survol:   #f2705f;
+  --accent-faible:   rgba(232,80,63,0.16);
+  --accent-bord:     rgba(232,80,63,0.45);
+  --accent-selection: rgba(232,80,63,0.14);
+
+  --succes:          #6ee7a8;
+  --succes-faible:   rgba(110,231,168,0.1);
+  --alerte:          #ffb05a;
+  --alerte-faible:   rgba(255,176,90,0.09);
+  --alerte-bord:     rgba(255,176,90,0.22);
+  --alerte-texte:    #241603;   /* sur un bouton plein en couleur d'alerte */
+
+  --surface:         rgba(255,255,255,0.045);
+  --surface-bord:    rgba(255,255,255,0.07);
+  --surface-forte:   rgba(255,255,255,0.07);
+  --surface-survol:  rgba(255,255,255,0.12);
+  --creux:           rgba(0,0,0,0.28);   /* bloc d'URL, champs de saisie */
+  --champ-bord:      rgba(255,255,255,0.1);
+
+  --bord-ligne:      rgba(255,255,255,0.07);
+  --bord-pointille:  rgba(255,255,255,0.14);
+  --puce-bord:       rgba(255,255,255,0.18);
+  --icone:           #7a7a8a;
+  --etoile-eteinte:  #55556a;
+
+  --inactif-fond:    rgba(255,255,255,0.07);
+  --inactif-texte:   #6a6a7a;
+  --survol:          brightness(1.25);
+  --survol-plein:    brightness(1.1);
+
+  --danger-fond:     rgba(255,120,110,0.2);
+  --danger-texte:    #ff9c92;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --fond:            #ffffff;
+    --texte:           #1f1d1a;
+    --texte-2:         #8a8378;
+    --texte-3:         #96907f;
+    --meta:            #7a736a;
+
+    --accent-clair:    #c33d2c;
+    --accent-survol:   #c33d2c;
+    --accent-faible:   rgba(232,80,63,0.14);
+    --accent-bord:     rgba(232,80,63,0.5);
+    --accent-selection: rgba(232,80,63,0.1);
+
+    --succes:          #2f8a5a;
+    --succes-faible:   rgba(47,138,90,0.1);
+    --alerte:          #b57314;
+    --alerte-faible:   rgba(181,115,20,0.07);
+    --alerte-bord:     rgba(181,115,20,0.28);
+    --alerte-texte:    #ffffff;
+
+    --surface:         rgba(0,0,0,0.028);
+    --surface-bord:    rgba(0,0,0,0.05);
+    --surface-forte:   rgba(0,0,0,0.05);
+    --surface-survol:  rgba(0,0,0,0.08);
+    --creux:           #ffffff;
+    /* En thème clair le champ est blanc sur fond blanc : c'est le contour, et lui
+       seul, qui le rend visible. --surface-bord serait trop pâle pour ça. */
+    --champ-bord:      rgba(0,0,0,0.1);
+
+    --bord-ligne:      #e7e3dc;
+    --bord-pointille:  rgba(0,0,0,0.12);
+    --puce-bord:       rgba(0,0,0,0.22);
+    --icone:           #a49c8d;
+    --etoile-eteinte:  #cfc9be;
+
+    --inactif-fond:    rgba(0,0,0,0.05);
+    --inactif-texte:   #b3ada2;
+    --survol:          brightness(0.975);
+    --survol-plein:    brightness(0.94);
+
+    --danger-fond:     rgba(232,80,63,0.12);
+    --danger-texte:    #c33d2c;
+  }
+}
 
 * {
   box-sizing: border-box;
@@ -9,32 +110,31 @@
 /* Le fond doit être sur html aussi : sur Firefox Android le popup s'ouvre en vue
    plein écran, et body ne couvre pas forcément tout l'écran. */
 html, body {
-  background: #1a1a2e;
+  background: var(--fond);
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   font-size: 13px;
-  color: #eee;
-  /* min-width donne sa largeur au popup desktop (qui se dimensionne au contenu),
-     width: 100% laisse la vue plein écran mobile occuper tout l'écran. */
-  min-width: 280px;
+  color: var(--texte);
+  /* min-width donne sa largeur au popup desktop (qui se dimensionne au contenu) ;
+     360 px est la largeur de la maquette. width: 100% laisse la vue plein écran
+     mobile occuper tout l'écran. */
+  min-width: 360px;
   width: 100%;
   min-height: 200px;
 }
 
 #app {
-  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
   /* Borne la largeur INTRINSÈQUE du document, et c'est tout l'enjeu : un popup
      browser_action se dimensionne sur la largeur préférée de son contenu. Une URL
      de stream est une chaîne de 200 caractères sans espace, dont la largeur
      préférée dépasse 1100 px — mesuré. Le popup s'étirait donc jusqu'au plafond
      de Firefox dès qu'un flux était détecté, et la vue plein écran mobile
      paraissait dézoomée.
-     `word-break: break-all` sur .stream-info ne suffit PAS : il autorise la
+     `word-break: break-all` sur le bloc d'URL ne suffit PAS : il autorise la
      coupure à l'affichage sans réduire la largeur préférée. Vérifié aussi pour
      `overflow-wrap: anywhere`. Seule une borne explicite ici y change quelque
      chose. 420 px laisse la vue plein écran occuper tout l'écran d'un téléphone
@@ -42,384 +142,734 @@ body {
   max-width: 420px;
   margin: 0 auto;
   width: 100%;
+  padding-bottom: 4px;
 }
+
+/* ── En-tête ───────────────────────────────────────────────────────────────── */
 
 header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
+  padding: 16px 16px 12px;
 }
 
-h1 {
-  font-size: 18px;
+.marque {
+  font-size: 17px;
   font-weight: 700;
-  color: #e74c3c;
-  letter-spacing: 1px;
+  letter-spacing: -0.03em;
 }
 
-.status-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  cursor: help;
-  flex: none;
-}
-.status-dot.online  { background: #2ecc71; }
-.status-dot.offline { background: #e74c3c; }
+.marque-sep { color: var(--accent); }
 
-.label {
-  font-size: 11px;
-  text-transform: uppercase;
-  color: #888;
-  margin-bottom: 4px;
-}
-
-.section-head {
+/* Entrée unique vers la gestion des serveurs : son point porte l'état du daemon
+   actif, ce qui évite une pastille d'état séparée sans action associée. */
+.pastille {
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  background: var(--surface-forte);
+  border: none;
+  border-radius: 999px;
+  color: var(--texte-2);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.pastille:hover,
+.pastille:active {
+  background: var(--surface-survol);
+  color: var(--texte);
+}
+
+.pastille > span:not(.ico):not(.pastille-point) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pastille-point {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--alerte);
+}
+
+.pastille-point.enligne { background: var(--succes); }
+
+/* ── Structure des vues ────────────────────────────────────────────────────── */
+/* Les écrans secondaires REMPLACENT la vue principale au lieu de s'empiler
+   dessous : sur la vue plein écran d'Android, un formulaire poussé sous une
+   liste d'appareils naît hors de l'écran. */
+
+.vue {
+  display: flex;
+  flex-direction: column;
+}
+
+.vue[hidden] { display: none; }
+
+.entete-section,
+.entete-carte {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
 }
 
-.btn-mini {
-  background: #0f3460;
-  color: #eee;
-  border: none;
-  border-radius: 5px;
-  padding: 5px 8px;
+.entete-section { padding: 2px 18px 10px; }
+
+.titre-section {
   font-size: 11px;
-  cursor: pointer;
-  flex: none;
-  transition: background 0.15s;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--texte-2);
 }
 
-.btn-mini:hover:not(:disabled)  { background: #e74c3c; color: #fff; }
-.btn-mini:active:not(:disabled) { background: #c0392b; color: #fff; }
-.btn-mini:disabled              { opacity: 0.5; cursor: default; }
+.titre-section.accent { color: var(--accent-clair); }
 
-.stream-info {
-  background: #16213e;
-  border-radius: 6px;
-  padding: 8px;
-  word-break: break-all;
-  /* Complète break-all : coupe aussi quand un seul « mot » dépasse la ligne,
-     ce qui est le cas d'une URL de stream entière. */
-  overflow-wrap: anywhere;
-  font-size: 11px;
-  color: #aaa;
-  max-height: 50px;
-  overflow: hidden;
-}
-
-.stream-info .detected {
-  color: #2ecc71;
-}
-
-/* ── Liste d'appareils ─────────────────────────────────────────────────────── */
-
-#device-list {
+.liste {
   list-style: none;
-  background: #16213e;
-  border-radius: 6px;
-  overflow: hidden;
-  max-height: 200px;
-  overflow-y: auto;
-}
-
-#device-list li {
-  border-bottom: 1px solid #0f3460;
-}
-#device-list li:last-child { border-bottom: none; }
-
-#device-list li.device {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-#device-list li.device:hover  { background: #0f3460; }
-#device-list li.device:active { background: #14406f; }
-
-#device-list li.device.selected {
-  background: #e74c3c22;
-  box-shadow: inset 3px 0 0 #e74c3c;
-}
-#device-list li.device.selected .dev-name { color: #e74c3c; }
-
-.dev-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  flex: 1;
+  gap: 6px;
+  padding: 0 12px;
 }
 
-.dev-name {
-  font-size: 13px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.liste:empty { display: none; }
+
+.champs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 12px;
 }
 
-.dev-meta {
-  font-size: 10px;
-  color: #777;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.pied {
+  padding: 14px 12px;
 }
 
-.dev-star {
+.pied.colonne {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.aide {
+  margin: 5px 14px 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--texte-3);
+  text-wrap: pretty;
+}
+
+/* ── Liens et boutons discrets ─────────────────────────────────────────────── */
+
+.lien-retour,
+.lien-discret,
+.lien-accent {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   background: none;
   border: none;
-  color: #555;
-  font-size: 18px;
-  line-height: 1;
+  font-family: inherit;
+  font-size: 12px;
+  padding: 4px 0;
   cursor: pointer;
-  flex: none;
-  padding: 6px;
-  border-radius: 5px;
-  transition: color 0.15s, background 0.15s;
+  color: var(--texte-2);
+  transition: color 0.15s;
 }
 
-.dev-star.on           { color: #f1c40f; }
-.dev-star:hover        { background: rgba(255,255,255,0.08); color: #f1c40f; }
-.dev-star:active       { background: rgba(255,255,255,0.16); }
+.lien-retour:hover, .lien-retour:active,
+.lien-discret:hover, .lien-discret:active { color: var(--texte); }
 
-/* Boutons secondaires d'une ligne : renommer, valider, annuler */
-.dev-btn {
-  background: none;
-  border: none;
-  color: #888;
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-  flex: none;
-  padding: 6px;
-  border-radius: 5px;
-  transition: color 0.15s, background 0.15s;
-}
-
-.dev-btn:hover  { background: rgba(255,255,255,0.08); color: #fff; }
-.dev-btn:active { background: rgba(255,255,255,0.16); }
-
-/* ── Renommage en place ────────────────────────────────────────────────────── */
-
-#device-list li.device.editing {
-  cursor: default;
+.lien-accent {
+  color: var(--accent);
+  font-weight: 500;
   gap: 6px;
 }
 
-#device-list li.device.editing:hover { background: none; }
+.lien-accent:hover, .lien-accent:active { color: var(--accent-survol); }
 
-.dev-edit {
-  flex: 1;
-  min-width: 0;
-  background: #0f3460;
-  border: 1px solid #e74c3c;
-  border-radius: 5px;
-  color: #eee;
-  font-size: 13px;
-  padding: 6px 8px;
-  outline: none;
+.lien-retour:disabled,
+.lien-discret:disabled,
+.lien-accent:disabled { opacity: 0.5; cursor: default; }
+
+.lien-discret.centre {
+  width: 100%;
+  justify-content: center;
+  padding: 7px;
 }
 
-.dev-edit::placeholder { color: #6b7fa3; }
+/* ── Boutons pleine largeur ────────────────────────────────────────────────── */
 
-#device-list li.loading,
-#device-list li.empty {
-  padding: 8px 10px;
-  color: #666;
-  font-style: italic;
-}
-
-/* ── Config daemon ─────────────────────────────────────────────────────────── */
-
-#daemon-config {
+.btn-primaire,
+.btn-secondaire {
   display: flex;
-  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  border: none;
+  border-radius: 13px;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 15px;
+  cursor: pointer;
+  transition: filter 0.15s, background 0.15s, color 0.15s;
 }
 
-#daemon-ip-input {
+.btn-primaire {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn-primaire:hover:not(:disabled),
+.btn-primaire:active:not(:disabled) { filter: var(--survol-plein); }
+
+.btn-primaire:disabled {
+  background: var(--inactif-fond);
+  color: var(--inactif-texte);
+  cursor: not-allowed;
+}
+
+.btn-secondaire {
+  background: var(--surface-forte);
+  color: var(--texte);
+  font-size: 14px;
+  padding: 14px;
+}
+
+.btn-secondaire:hover:not(:disabled),
+.btn-secondaire:active:not(:disabled) { background: var(--surface-survol); }
+
+.btn-secondaire:disabled { opacity: 0.55; cursor: default; }
+
+.btn-secondaire.danger:hover,
+.btn-secondaire.danger:active {
+  background: var(--danger-fond);
+  color: var(--danger-texte);
+}
+
+/* Ajouts manuels : une ligne pointillée plutôt qu'un bouton plein, pour la
+   distinguer des actions principales. */
+.ligne-pointillee {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 12px 0;
+  padding: 11px 14px;
+  border: 1px dashed var(--bord-pointille);
+  border-radius: 12px;
+  background: none;
+  color: var(--texte-2);
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.ligne-pointillee:hover,
+.ligne-pointillee:active {
+  border-color: var(--accent-bord);
+  color: var(--accent-clair);
+}
+
+/* ── Champs de saisie ──────────────────────────────────────────────────────── */
+
+input[type="text"] {
+  background: var(--creux);
+  border: 1px solid var(--champ-bord);
+  border-radius: 11px;
+  color: var(--texte);
+  font-family: inherit;
+  font-size: 14px;
+  padding: 13px 14px;
+  outline: none;
+  min-width: 0;
+  transition: border-color 0.15s;
+}
+
+input[type="text"]:focus { border-color: var(--accent-bord); }
+input[type="text"]::placeholder { color: var(--texte-3); }
+
+.mono, input.mono {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, 'Roboto Mono', monospace;
+}
+
+.msg {
+  margin: 0 2px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--alerte);
+}
+
+.msg.ok { color: var(--succes); }
+
+.flash {
+  margin: 0 12px 6px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--succes);
+  background: var(--succes-faible);
+  border-radius: 9px;
+  padding: 9px 12px;
+}
+
+/* ── Bandeau « daemon injoignable » ────────────────────────────────────────── */
+
+.bandeau {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 12px 12px;
+  padding: 14px;
+  background: var(--alerte-faible);
+  border: 1px solid var(--alerte-bord);
+  border-radius: 12px;
+}
+
+.bandeau-titre {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--alerte);
+}
+
+.bandeau-texte {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--meta);
+}
+
+.bandeau-action {
+  align-self: flex-start;
+  background: var(--alerte);
+  border: none;
+  border-radius: 9px;
+  color: var(--alerte-texte);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 9px 13px;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+
+.bandeau-action:hover, .bandeau-action:active { filter: var(--survol-plein); }
+
+/* ── Carte « flux détecté » ────────────────────────────────────────────────── */
+
+.carte {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 12px 12px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--surface-bord);
+  border-radius: 12px;
+}
+
+.flux-ligne {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent-clair);
+  background: var(--accent-faible);
+  border-radius: 5px;
+  padding: 4px 7px;
+  flex: none;
+}
+
+.flux-domaine {
   flex: 1;
   min-width: 0;
-  background: #16213e;
-  border: 1px solid #0f3460;
-  border-radius: 5px;
-  color: #eee;
-  font-size: 11px;
-  padding: 5px 8px;
-  outline: none;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-#daemon-ip-input:focus { border-color: #e74c3c; }
-#daemon-ip-input::placeholder { color: #555; }
+.flux-domaine.vide {
+  font-weight: 400;
+  color: var(--texte-3);
+}
 
-#btn-save-daemon,
-#btn-detect-daemon {
-  background: #0f3460;
-  color: #eee;
-  border: none;
-  border-radius: 5px;
-  padding: 5px 10px;
+/* Replié par défaut : déplié, il mangeait toute la hauteur du popup. */
+.flux-url {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, 'Roboto Mono', monospace;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--texte-2);
+  background: var(--creux);
+  border-radius: 8px;
+  padding: 9px 10px;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  max-height: 76px;
+  overflow-y: auto;
+}
+
+#url-chevron {
+  transition: transform 0.18s;
+}
+
+#url-chevron.ouvert { transform: rotate(180deg); }
+
+/* ── Lignes : appareils et serveurs ────────────────────────────────────────── */
+
+.ligne {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--bord-ligne);
+  background: transparent;
   cursor: pointer;
+  transition: filter 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.ligne:hover, .ligne:active { filter: var(--survol); }
+
+.ligne.active {
+  background: var(--accent-selection);
+  border-color: var(--accent-bord);
+}
+
+.ligne-appareil {
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+}
+
+.ligne-serveur {
+  gap: 10px;
+  padding: 9px 11px;
+  border-radius: 11px;
+}
+
+/* Un appareil éteint reste castable — le daemon resonde son IP — mais il ne doit
+   pas se présenter comme équivalent à une TV allumée. */
+.ligne.eteint { opacity: 0.6; }
+
+@media (prefers-color-scheme: light) {
+  .ligne.eteint { opacity: 0.55; }
+}
+
+.puce {
+  border-radius: 50%;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--puce-bord);
+  background: transparent;
+}
+
+.ligne-appareil .puce { width: 18px; height: 18px; }
+.ligne-serveur  .puce { width: 15px; height: 15px; }
+
+.ligne.active .puce {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.puce svg { stroke: #fff; }
+
+.ligne-infos {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.ligne-serveur .ligne-infos { gap: 2px; }
+
+.ligne-nom {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ligne.active .ligne-nom { font-weight: 600; }
+
+.ligne-meta {
+  font-size: 11px;
+  color: var(--meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Serveur : nom et statut sur la même ligne, URL en dessous */
+.serveur-tete {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+}
+
+.serveur-nom {
   font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.serveur-statut {
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex: none;
+  color: var(--meta);
+}
+
+.serveur-statut.enligne     { color: var(--succes); }
+.serveur-statut.injoignable { color: var(--alerte); }
+
+.serveur-url {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, 'Roboto Mono', monospace;
+  font-size: 10px;
+  color: var(--meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Boutons d'action d'une ligne */
+.ligne-btn {
+  background: none;
+  border: none;
+  color: var(--icone);
+  padding: 5px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  flex: none;
+  transition: background 0.15s, color 0.15s;
+}
+
+.ligne-btn:hover, .ligne-btn:active {
+  background: var(--surface-survol);
+  color: var(--texte);
+}
+
+.ligne-btn.etoile { color: var(--etoile-eteinte); }
+.ligne-btn.etoile.on { color: var(--accent-clair); }
+
+.ligne-btn.oubli:hover, .ligne-btn.oubli:active {
+  background: var(--danger-fond);
+  color: var(--danger-texte);
+}
+
+.btn-tester {
+  background: var(--surface-forte);
+  border: none;
+  border-radius: 6px;
+  color: var(--texte);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 5px 8px;
+  cursor: pointer;
   flex: none;
   transition: background 0.15s;
 }
 
-#btn-save-daemon:hover  { background: #2ecc71; color: #fff; }
-#btn-save-daemon:active { background: #27ae60; color: #fff; }
+.btn-tester:hover:not(:disabled), .btn-tester:active:not(:disabled) { background: var(--surface-survol); }
+.btn-tester:disabled { opacity: 0.6; cursor: default; }
 
-#btn-detect-daemon:hover  { background: #3498db; color: #fff; }
-#btn-detect-daemon:active { background: #2980b9; color: #fff; }
-#btn-detect-daemon:disabled { opacity: 0.5; cursor: default; }
+/* ── Édition en place ──────────────────────────────────────────────────────── */
+/* Plutôt qu'un prompt() : au tactile c'est la seule option correcte. */
 
-/* Le balayage peut durer plusieurs secondes : sans retour visible, le popup
-   passerait pour figé. */
-.daemon-hint {
-  margin: 4px 2px 0;
-  font-size: 11px;
-  color: #8a93a8;
-  line-height: 1.4;
+.ligne-edition {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--accent-bord);
+  border-radius: 12px;
+  background: var(--accent-selection);
 }
 
-/* ── Ajout manuel ──────────────────────────────────────────────────────────── */
-
-#manual-add-wrap {
-  margin-top: 6px;
+.ligne-serveur.ligne-edition {
+  gap: 7px;
+  padding: 8px 9px;
+  border-radius: 11px;
 }
 
-#manual-add-wrap summary {
-  font-size: 11px;
-  color: #888;
-  cursor: pointer;
-  padding: 4px 0;
-  list-style: none;
+.ligne-edition input[type="text"] {
+  flex: 1;
+  border-radius: 9px;
+  font-size: 14px;
+  padding: 9px 11px;
 }
 
-#manual-add-wrap summary::-webkit-details-marker { display: none; }
-#manual-add-wrap summary:hover { color: #e74c3c; }
+.ligne-serveur.ligne-edition input[type="text"] {
+  border-radius: 8px;
+  font-size: 13px;
+  padding: 8px 10px;
+}
 
-#manual-add {
+.ligne-btn.valider {
+  background: var(--accent);
+  color: #fff;
+  padding: 7px;
+}
+
+.ligne-serveur .ligne-btn.valider { padding: 6px; }
+
+.ligne-btn.valider:hover, .ligne-btn.valider:active {
+  background: var(--accent-survol);
+  color: #fff;
+}
+
+.liste-vide {
+  padding: 12px 14px;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--texte-3);
+}
+
+/* ── Vue : lecture en cours ────────────────────────────────────────────────── */
+
+.carte-lecture {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-top: 6px;
+  gap: 16px;
+  margin: 0 12px;
+  padding: 20px 16px;
+  background: linear-gradient(180deg, rgba(232,80,63,0.18), rgba(232,80,63,0.06));
+  border: 1px solid rgba(232,80,63,0.3);
+  border-radius: 14px;
 }
 
-#manual-add input {
-  background: #16213e;
-  border: 1px solid #0f3460;
-  border-radius: 5px;
-  color: #eee;
-  font-size: 11px;
-  padding: 5px 8px;
-  outline: none;
+.lecture-etat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-#manual-add input:focus { border-color: #e74c3c; }
-#manual-add input::placeholder { color: #555; }
-
-#btn-add-manual {
-  background: #0f3460;
-  color: #eee;
-  border: none;
-  border-radius: 5px;
-  padding: 6px;
-  font-size: 11px;
-  cursor: pointer;
-  transition: background 0.15s;
+.lecture-point {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-clair);
 }
 
-#btn-add-manual:hover:not(:disabled)  { background: #e74c3c; color: #fff; }
-#btn-add-manual:active:not(:disabled) { background: #c0392b; color: #fff; }
-#btn-add-manual:disabled              { opacity: 0.5; cursor: default; }
-
-#manual-msg:empty { display: none; }
-#manual-msg {
-  font-size: 10px;
-  line-height: 1.35;
-  padding: 4px 2px;
-}
-#manual-msg.ok   { color: #2ecc71; }
-#manual-msg.warn { color: #f1c40f; }
-
-/* ── Actions principales ───────────────────────────────────────────────────── */
-
-#btn-cast {
-  background: #e74c3c;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  padding: 10px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s, opacity 0.15s;
+.lecture-cible {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
 }
 
-#btn-cast:hover:not(:disabled)  { background: #c0392b; }
-#btn-cast:active:not(:disabled) { background: #a93226; }
-#btn-cast:disabled { opacity: 0.4; cursor: not-allowed; }
-
-#btn-stop {
-  background: #444;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  padding: 8px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.15s;
+.lecture-nom {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-#btn-stop:hover  { background: #333; }
-#btn-stop:active { background: #222; }
+.lecture-meta {
+  font-size: 12px;
+  color: var(--meta);
+}
+
+.lecture-source {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Icônes ────────────────────────────────────────────────────────────────── */
+
+.ico {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+
+.ico svg { display: block; }
 
 /* ── Vue plein écran (Firefox Android) ─────────────────────────────────────── */
-/* Le popup s'ouvre en pleine page : on agrandit les cibles tactiles et on libère
-   la hauteur de la liste d'appareils, qui n'a plus de raison d'être bridée. */
+/* Le popup s'ouvre en pleine page : on agrandit les cibles tactiles pour tenir
+   les 44 px minimum, et on remonte les corps de texte. */
 
 @media (min-width: 400px) {
   body { font-size: 15px; }
 
-  #app { padding: 16px; gap: 16px; }
+  header { padding: 20px 18px 14px; }
 
-  h1 { font-size: 22px; }
+  .marque { font-size: 21px; }
 
-  .label, .dev-meta, #manual-add-wrap summary { font-size: 12px; }
+  .pastille { font-size: 14px; padding: 10px 14px; }
 
-  .btn-mini { font-size: 13px; padding: 10px 14px; }
+  .titre-section { font-size: 12px; }
 
-  #device-list { max-height: 45vh; }
+  .entete-section { padding: 2px 20px 12px; }
 
-  #device-list li.device { padding: 12px; gap: 12px; min-height: 56px; }
+  .liste, .champs { padding: 0 14px; gap: 8px; }
 
-  .dev-name { font-size: 15px; }
+  .pied { padding: 16px 14px; }
 
-  .dev-star { font-size: 24px; padding: 10px; }
+  .aide, .flash, .msg, .bandeau-texte { font-size: 12px; }
 
-  .dev-btn { font-size: 18px; padding: 10px; }
+  .lien-retour, .lien-discret, .lien-accent { font-size: 14px; padding: 10px 0; }
+
+  .ligne-appareil { padding: 14px 16px; min-height: 60px; }
+
+  .ligne-serveur { padding: 12px 13px; min-height: 56px; }
+
+  .ligne-nom { font-size: 16px; }
+
+  .serveur-nom { font-size: 15px; }
+
+  .ligne-meta, .serveur-url, .serveur-statut { font-size: 12px; }
+
+  .ligne-btn { padding: 9px; }
+
+  .btn-tester { font-size: 12px; padding: 9px 12px; }
+
+  .ligne-pointillee { padding: 14px 16px; font-size: 14px; }
 
   /* 16px minimum : en dessous, Android zoome au focus */
-  .dev-edit { font-size: 16px; padding: 10px 12px; }
+  input[type="text"] { font-size: 16px; padding: 14px 15px; }
 
-  /* 16px minimum sur les champs : en dessous, Android peut zoomer au focus */
-  #daemon-ip-input, #manual-add input { font-size: 16px; padding: 10px 12px; }
+  .btn-primaire { font-size: 17px; padding: 17px; }
 
-  #btn-save-daemon { font-size: 16px; padding: 10px 16px; }
+  .btn-secondaire { font-size: 16px; padding: 16px; }
 
-  #btn-add-manual { font-size: 14px; padding: 12px; }
+  .flux-domaine { font-size: 16px; }
 
-  #manual-msg { font-size: 12px; }
+  .flux-url { font-size: 11px; max-height: 96px; }
 
-  .stream-info { font-size: 12px; max-height: 70px; }
+  .lecture-nom { font-size: 27px; }
 
-  #btn-cast { padding: 16px; font-size: 17px; }
-
-  #btn-stop { padding: 14px; font-size: 15px; }
+  .lecture-meta, .lecture-source { font-size: 13px; }
 }

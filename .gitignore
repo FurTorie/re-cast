@@ -11,6 +11,10 @@ web-ext-artifacts/
 *.xpi
 *.zip
 
+# Maquettes exportées depuis Claude Design : matière de travail, pas du code
+# livré. Le dépôt ne contient que ce qui tourne.
+design/
+
 # App Windows : tout ceci est régénéré par app/build.ps1 en quelques secondes
 app/Recast.exe
 app/*.pdb

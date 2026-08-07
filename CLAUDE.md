@@ -50,7 +50,7 @@ Ce découpage en deux est **volontaire** — ne pas proposer de fusionner le dae
 Conséquences pratiques :
 
 - **L'interface principale est le popup `browser_action`** (`popup/popup.html`). Sur Fenix il ne s'affiche pas comme un petit panneau flottant mais comme une **vue plein écran** — la mise en page doit donc s'adapter à la largeur de l'écran, pas à une largeur de popup fixe.
-- Le bouton flottant et le panel injecté de `content/content.js` sont un confort desktop. Ils sont actuellement inutilisables au tactile (`opacity: 0` révélé uniquement par `mouseenter` / `:hover`) — gap connu, pas le chemin principal.
+- **Le popup est le chemin UNIQUE.** Le bouton flottant et le panneau de cast injectés dans les pages ont été supprimés : ils n'étaient utilisables qu'à la souris (`opacity: 0` révélé par `mouseenter` / `:hover`), donc morts sur la plateforme cible, et ils dupliquaient un popup qui fait tout ce qu'ils faisaient. `content/content.js` ne fait plus qu'une chose — remonter `currentSrc` — et n'injecte plus rien ; `content/content.css` n'existe plus. **Ne pas les réintroduire** sans une raison qui ne soit pas « c'était pratique sur desktop ».
 - Toute interaction doit fonctionner **au tactile** : pas de dépendance à `:hover` seul, prévoir des états `:active`, cibles de 44 px minimum.
 - `localhost` n'est jamais le daemon côté téléphone. `popup.js` fait bien un `await` sur le storage avant d'agir ; `content.js` non, et son défaut `localhost` est structurellement faux sur mobile.
 - `manifest.json` déclare déjà `browser_specific_settings.gecko_android` — sans cette clé l'extension resterait desktop-only.
@@ -298,22 +298,49 @@ Subtilité mDNS : le SRV pointe vers un nom `.local` dont l'adresse arrive dans 
 
 `daemon/index.js` (`PORT`), `daemon/proxy.js` (valeur par défaut de `registerStream` *et* une const `port` locale séparée dans `rewriteM3u8`), `extension/popup/popup.js` (`DEFAULT_DAEMON`), `extension/content/content.js` (`DAEMON_URL`). Aucune configuration partagée.
 
-### Résolution de l'URL du daemon dans l'extension
+### L'extension gère PLUSIEURS daemons
 
-Le popup écrit `daemonUrl` dans `browser.storage.local`. Le défaut est `http://localhost:7171` — juste sur le poste qui héberge le daemon, sans effet ailleurs. Il remplace une IP LAN codée en dur (`192.168.1.14`) qui, chez quelqu'un d'autre, désignait une machine au hasard de son réseau.
+Ce n'est plus une adresse mais **une liste**, sous la clé `servers` de `browser.storage.local`, plus `activeServerId`. Un serveur par lieu ou par machine — maison, bureau, portable. Le daemon, lui, n'en sait toujours rien : il ne connaît pas ses pairs et ne persiste rien. La liste vit là où vit déjà celle des appareils.
 
-**Détection automatique.** `detecterDaemon()` sonde des adresses candidates et n'en retient une que si `GET /status` répond `app: "re:cast"`. Un simple HTTP 200 ne suffit pas : n'importe quel appareil peut écouter sur 7171. Ordre : adresses directes (enregistrée, `localhost`, `127.0.0.1`), puis balayage de `/24`.
+Une entrée porte **deux noms distincts, à ne pas fusionner** — exactement la même règle que pour les appareils :
 
-Le choix des `/24` à balayer vient d'un indice qu'on a déjà sous la main : **les IP des appareils enregistrés**. Une TV castée un jour est forcément sur le réseau du daemon. Vient ensuite le sous-réseau de la dernière adresse connue — suffisant quand seul le dernier octet a changé après un bail DHCP, le cas de loin le plus fréquent. Les plages génériques (`192.168.1`, `192.168.0`, `10.0.0`, `192.168.2`) ne servent qu'au premier lancement.
+| Champ | Origine | Écrasable ? |
+|---|---|---|
+| `nomReseau` | `os.hostname()`, lu dans `GET /status` | oui, à chaque sonde |
+| `nom` | surnom saisi par l'utilisateur | **jamais** |
+
+L'affichage prend `nom || nomReseau || hôte de l'URL`.
+
+**`GET /status` renvoie `nom` pour ça.** C'est la seule identité stable d'un daemon : après un bail DHCP son adresse change, son nom de machine non. `integrerDetection()` s'en sert pour **recoller l'entrée existante sur la nouvelle IP** au lieu d'ajouter une ligne morte à chaque changement d'adresse.
+
+**La bascule automatique** (`connecter()`, à l'ouverture du popup) : le serveur actif d'abord ; s'il ne répond pas, tous les autres **en parallèle** — les sonder en série ferait payer un délai d'attente par serveur, alors qu'ils sont tous injoignables en même temps quand on change de réseau ; on retient le premier de la **liste** qui répond, pas le plus rapide, parce que l'ordre de la liste est celui que l'utilisateur a choisi. En dernier recours seulement, le balayage réseau.
+
+`daemonUrl`, l'ancienne clé, n'est plus **écrite** : son seul autre lecteur était le panneau injecté, supprimé depuis. Elle est encore **lue une fois**, dans `chargerServeurs()`, quand `servers` est absent — c'est la reprise des installations antérieures, et rien d'autre. Ne pas la remettre à jour « au cas où » : une clé écrite que personne ne lit finit par diverger sans que rien ne le signale.
+
+**Détection automatique.** `detecterDaemon()` sonde des adresses candidates et n'en retient une que si `GET /status` répond `app: "re:cast"`. Un simple HTTP 200 ne suffit pas : n'importe quel appareil peut écouter sur 7171. Ordre : adresses directes (toutes celles de la liste, `localhost`, `127.0.0.1`), puis balayage de `/24`.
+
+Le choix des `/24` à balayer vient d'indices qu'on a déjà sous la main : **les IP des appareils enregistrés** — une TV castée un jour est forcément sur le réseau du daemon — puis celles des serveurs enregistrés, qui désignent des réseaux qu'on fréquente. Les plages génériques (`192.168.1`, `192.168.0`, `10.0.0`, `192.168.2`) ne servent qu'au premier lancement.
 
 Deux points à ne pas défaire :
 
 - `sousReseaux()` distingue **deux** entrées, une pour les IP complètes et une pour les préfixes. Une seule fonction exigeant quatre octets rejetait silencieusement toutes les plages de repli, et le premier lancement — le cas où le balayage sert le plus — ne sondait rien.
-- La détection se déclenche **sur échec**, jamais à chaque ouverture. Balayer le réseau systématiquement serait long et inutile alors que l'adresse enregistrée est bonne presque toujours. Le bouton 🔎 permet de la forcer.
+- La détection se déclenche **sur échec**, jamais à chaque ouverture. Balayer le réseau systématiquement serait long et inutile alors que l'adresse enregistrée est bonne presque toujours. Le bouton « Détecter sur le réseau » permet de la forcer.
 
 Pas de mDNS ici : une extension n'a aucune API de socket UDP. Ce qui rend le balayage possible, c'est que la permission d'hôte universelle exempte `fetch()` du CORS.
 
-Le content script lit la même clé, mais son chargement est asynchrone : un clic survenant avant la résolution retombait sur `localhost`, adresse qui ne désigne jamais le daemon depuis un téléphone. `daemonUrlPret()` attend désormais la promesse avant chaque requête. Il ne fait pas de détection automatique — balayer le réseau depuis chaque page visitée serait disproportionné pour un confort desktop.
+### Le popup : cinq écrans qui se remplacent
+
+`popup.js` tient une `vue` unique parmi `principale`, `serveurs`, `ajoutServeur`, `ajoutAppareil`, `lecture`, et `rendre()` n'affiche que celle-là. Les écrans secondaires **remplacent** la vue principale au lieu de s'empiler dessous : en vue plein écran sur Fenix, un formulaire poussé sous une liste d'appareils naît hors de l'écran.
+
+Trois conséquences de forme :
+
+- **Rien n'est construit en `innerHTML`.** Les noms d'appareils et de serveurs viennent du réseau ; les lignes sont assemblées en DOM, et les icônes SVG par `createElementNS`. C'est la même fonction qui sert aux deux, mélanger balisage et données n'aurait jamais été sûr.
+- **La valeur d'un champ d'édition vit dans l'état, pas dans le DOM** (`editValeur`, `editServeurValeur`). Un rendu déclenché pendant la frappe — fin d'un scan, réponse d'une sonde — recrée le champ, et la saisie serait perdue. Le drapeau `focusAPrendre` évite au passage de reprendre le focus à chaque rendu : sans lui, `select()` rejouait à chaque fois et la frappe suivante effaçait tout.
+- **L'état de lecture est restauré depuis `/status`.** `state.js` y joint désormais `host` et un `protocole` lisible (`Chromecast`, pas `CHROMECAST`) : c'est tout ce que le popup a pour réafficher « En lecture · DLNA · 192.168.1.222 » après une fermeture de Firefox.
+
+**Thème clair et sombre** : un seul jeu de règles, toutes les couleurs derrière des variables CSS, `prefers-color-scheme` bascule l'ensemble. Pas d'interrupteur — la maquette montre les deux côte à côte pour les comparer, ce n'est pas un réglage du produit.
+
+La maquette est dessinée en Archivo / IBM Plex Mono. Le popup reste sur la **pile système** : la CSP interdit une police distante, et le popup doit s'ouvrir hors ligne. Roboto sur Android, Segoe UI sur Windows — deux grotesques proches du dessin d'Archivo.
 
 ### CORS : deux régimes, à ne surtout pas unifier
 

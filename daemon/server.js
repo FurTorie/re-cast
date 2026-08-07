@@ -1,6 +1,7 @@
 // re:cast daemon - server.js
 // Serveur Express localhost:7171 - Étape 1
 
+const os = require('os');
 const express = require('express');
 const cors = require('cors');
 const chromecast = require('./cast/chromecast');
@@ -96,6 +97,12 @@ app.get('/status', (req, res) => {
     status:    'ok',
     version:   VERSION,
     extension: versionExtension,
+    // Nom de la machine. L'extension gère désormais PLUSIEURS serveurs re:cast
+    // (maison, bureau…) et doit pouvoir les distinguer autrement que par leur IP.
+    // C'est aussi la seule identité stable d'un daemon : après un bail DHCP son
+    // adresse change, son nom non — l'extension recolle alors l'entrée existante
+    // sur la nouvelle IP au lieu d'ajouter un doublon.
+    nom:       os.hostname(),
     ip:        discovery.localIpFor(),
     lecture:   state.courant()
   });
@@ -166,7 +173,7 @@ app.post('/cast', async (req, res) => {
     }
 
     await mod.cast({ deviceId: targetId, streamUrl, referer, title });
-    state.demarre({ deviceId: targetId, deviceName: name, titre: title, url: streamUrl });
+    state.demarre({ deviceId: targetId, deviceName: name, titre: title, url: streamUrl, host });
     res.json({ status: 'casting' });
   } catch (err) {
     console.error('[re:cast] Erreur cast:', err.message);

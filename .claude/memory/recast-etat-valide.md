@@ -11,9 +11,10 @@ Ce fichier remplace une note qui listait des correctifs « en attente de test »
 
 Leçon à garder au-delà de ce projet : une hypothèse validée en simulation n'est pas un correctif. Sur ce matériel, le seul juge est la TV.
 
-Deux chantiers d'interface restent ouverts, tous deux côté extension, aucun bloquant :
+**Le popup a été entièrement refait le 2026-08-07**, d'après une maquette Claude Design déposée dans `design/` : cinq écrans qui se remplacent, gestion de plusieurs serveurs re:cast, thème clair et sombre. Le bouton flottant injecté dans les pages a été supprimé du même coup — le popup est désormais le chemin unique.
 
-- le bouton `📡 Caster` à fixer en bas de l'écran en vue plein écran (question posée à l'utilisateur, jamais tranchée) ;
-- le bouton flottant de `extension/content/content.js`, inutilisable au tactile — il naît en `opacity: 0` et n'apparaît qu'au survol souris. Confort desktop, pas le chemin principal, qui est le popup.
+**Cette refonte n'a pas encore vu la TV.** C'est exactement le piège que ce fichier documente plus haut : tant que le matériel n'a pas tranché, elle est « écrite », pas « validée ». Le cœur du cast, lui, n'a pas bougé.
+
+Un chantier d'interface reste ouvert, non bloquant : le bouton `📡 Caster` à fixer ou non en bas de l'écran en vue plein écran — question posée à l'utilisateur, jamais tranchée. Moins pressant depuis que l'URL du flux est repliée par défaut, ce qui raccourcit l'écran.
 
 Voir [[recast-cible-android]].
