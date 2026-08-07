@@ -5,7 +5,6 @@
 
 const MediaRendererClient = require('upnp-mediarenderer-client');
 const http = require('http');
-const url  = require('url');
 const { registerStream } = require('../proxy');
 const discovery = require('../discovery');
 
@@ -225,7 +224,13 @@ function castViaLibrary(device, streamUrl, title, timeoutMs = 6000) {
 async function castViaSoap(device, streamUrl, title) {
   const xml = await fetchXml(device.location);
   const controlUrl = extractControlUrl(xml);
-  const parsed = url.parse(device.location);
+  // WHATWG URL et non url.parse() : ce dernier est déprécié (DEP0169) et écrivait
+  // un avertissement au milieu de CHAQUE cast DLNA, juste avant la première
+  // tentative SetAVTransportURI. Son texte contient « prone to errors », donc la
+  // console de l'app le coloriait en rouge — un avertissement bénin ressortait
+  // comme l'échec du cast en cours.
+  // `.port` vaut '' quand l'URL n'en porte pas : parseInt('') donne NaN, d'où 80.
+  const parsed = new URL(device.location);
   const host = parsed.hostname;
   const port = parseInt(parsed.port) || 80;
 
@@ -366,7 +371,7 @@ async function stop() {
     try {
       const xml = await fetchXml(device.location);
       const controlUrl = extractControlUrl(xml);
-      const parsed = url.parse(device.location);
+      const parsed = new URL(device.location);
       await soap(parsed.hostname, parseInt(parsed.port) || 80, controlUrl, 'Stop',
         `<u:Stop xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
           <InstanceID>0</InstanceID>

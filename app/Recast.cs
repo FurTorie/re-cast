@@ -1282,6 +1282,17 @@ namespace Recast
         // de diagnostic.
         static Color CouleurDe(string ligne)
         {
+            // Testé AVANT le rouge, et c'est tout l'intérêt. Un avertissement de Node
+            // n'est pas une erreur, mais le DeprecationWarning de url.parse() sortait
+            // en rouge à chaque cast : le test rouge cherche « error », que son texte
+            // contient dans « prone to errors ». Même piège pour tout avertissement
+            // à venir, d'où un test sur la forme (« …Warning: ») plutôt que sur ce
+            // cas précis. Un repli qui réussit et une origine refusée relèvent de la
+            // même nuance : ça mérite l'œil, pas l'alarme.
+            if (ligne.Contains("Warning:") || ligne.Contains("(Use `node")
+             || ligne.Contains("fallback")  || ligne.Contains("Origine refusée"))
+                return Color.FromArgb(232, 178, 104);                    // orange : avertissement
+
             if (ligne.Contains("⚠") || ligne.IndexOf("ERREUR", StringComparison.OrdinalIgnoreCase) >= 0
                                      || ligne.IndexOf("Error", StringComparison.OrdinalIgnoreCase) >= 0
                                      || ligne.IndexOf("échec", StringComparison.OrdinalIgnoreCase) >= 0
