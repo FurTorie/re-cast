@@ -54,6 +54,9 @@ Source: "Recast.exe";        DestDir: "{app}"; Flags: ignoreversion
 Source: "Recast.exe.config"; DestDir: "{app}"; Flags: ignoreversion
 Source: "tray.png";          DestDir: "{app}"; Flags: ignoreversion
 Source: "icon.png";          DestDir: "{app}"; Flags: ignoreversion
+; Livre aussi le .ico : l'app y prend l'entree a la taille exacte de la barre
+; des taches plutot que de reduire un PNG de 256 px.
+Source: "icon.ico";          DestDir: "{app}"; Flags: ignoreversion
 
 ; Daemon complet, dependances comprises : l'app le lance via `node daemon\index.js`
 Source: "..\daemon\*"; DestDir: "{app}\daemon"; Flags: ignoreversion recursesubdirs createallsubdirs

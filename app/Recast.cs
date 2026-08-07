@@ -444,6 +444,20 @@ namespace Recast
         // pas : on recopie l'icône puis on détruit le handle, sinon il fuit.
         Icon ChargerIcone()
         {
+            // D'abord le .ico multi-tailles : on demande la taille que Windows
+            // affichera réellement, et il y prend l'entrée composée pour elle.
+            // Avant, on partait du PNG et Windows réduisait un 256 px jusqu'en
+            // 16 px — d'où une icône de barre des tâches floue, quelle que soit
+            // la finesse de l'original.
+            try
+            {
+                string ico = Path.Combine(DossierApp(), "icon.ico");
+                if (File.Exists(ico))
+                    using (var i = new Icon(ico, SystemInformation.SmallIconSize))
+                        return (Icon)i.Clone();
+            }
+            catch { }
+
             string chemin = Path.Combine(DossierApp(), "tray.png");
             IntPtr h = IntPtr.Zero;
             try

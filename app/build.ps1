@@ -38,23 +38,22 @@ using System.Reflection;
 
 $sortie = Join-Path $ici 'Recast.exe'
 
-# icon.ico derive du PNG : evite de versionner un binaire de plus et garantit que
-# les deux ne divergent jamais. Genere AVANT la compilation, qui l'embarque.
+# Les images sont DESSINEES par logo.cs, jamais reechantillonnees : chaque taille
+# est composee pour elle-meme a partir des contours de la police. C'est ce qui
+# evite l'escalier qu'on voyait quand un seul PNG servait a tout.
+#
+# L'ancienne version derivait icon.ico d'icon.png via GetHicon(), ce qui ne
+# produisait qu'UNE taille : Windows reechantillonnait ce 256 px jusqu'en 16 px
+# pour la barre des taches. Une icone multi-tailles ne peut pas venir d'un seul
+# bitmap, d'ou le generateur. Il se compile avec le meme csc que l'app : aucun
+# outil supplementaire a installer.
 $ico = Join-Path $ici 'icon.ico'
-try {
-    Add-Type -AssemblyName System.Drawing
-    $bmp = [System.Drawing.Bitmap]::new((Join-Path $ici 'icon.png'))
-    $handle = $bmp.GetHicon()
-    $icone = [System.Drawing.Icon]::FromHandle($handle)
-    $flux = [System.IO.File]::Create($ico)
-    $icone.Save($flux)
-    $flux.Close()
-    $icone.Dispose()
-    $bmp.Dispose()
-    Write-Host "icon.ico genere"
-} catch {
-    throw "icon.ico non genere : $($_.Exception.Message)"
-}
+$genExe = Join-Path $env:TEMP 'recast-logo.exe'
+& $csc /nologo /optimize+ "/out:$genExe" /reference:System.Drawing.dll (Join-Path $ici 'logo.cs')
+if ($LASTEXITCODE -ne 0) { throw "logo.cs n'a pas compile" }
+& $genExe $ici
+if ($LASTEXITCODE -ne 0) { throw "generation des icones echouee" }
+Remove-Item $genExe -ErrorAction SilentlyContinue
 
 # /target:winexe : application fenetree, donc aucune console noire au lancement
 $arguments = @(
