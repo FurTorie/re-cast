@@ -18,19 +18,120 @@ using System.Net;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
+
+// System.Threading et System.Windows.Forms exposent tous deux un Timer. Ici on
+// veut systematiquement celui de WinForms, qui declenche sur le thread d'interface.
+using Timer = System.Windows.Forms.Timer;
 
 namespace Recast
 {
     static class Program
     {
+        // Conserve pendant toute la vie du processus : le mutex est libere a la
+        // sortie. Sans instance unique, deux apps lancent deux daemons qui se
+        // disputent le port 7171, et la seconde reste inerte.
+        static Mutex verrou;
+
         [STAThread]
         static void Main()
         {
+            bool premier;
+            verrou = new Mutex(true, "recast-tray-app-9f2c", out premier);
+            if (!premier)
+            {
+                MessageBox.Show(
+                    "re:cast est déjà lancé.\n\nSon icône se trouve dans la zone de notification, " +
+                    "près de l'horloge — pensez à déplier la flèche si elle est masquée.",
+                    "re:cast", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new TrayApp());
+
+            GC.KeepAlive(verrou);
+        }
+    }
+
+    // ─── Port ─────────────────────────────────────────────────────────────────
+    // Quand le port est pris par un daemon fantome — lance a la main, ou reste
+    // d'une instance mal fermee — l'app doit pouvoir le liberer sur demande
+    // plutot que de rester bloquee sans recours.
+
+    static class Port
+    {
+        // netstat plutot que GetExtendedTcpTable : quinze lignes contre soixante,
+        // et c'est une action ponctuelle declenchee par l'utilisateur.
+        public static int Occupant(int port)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo("netstat", "-ano -p TCP")
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true
+                };
+
+                using (var p = Process.Start(psi))
+                {
+                    string sortie = p.StandardOutput.ReadToEnd();
+                    p.WaitForExit(5000);
+
+                    foreach (string ligne in sortie.Split('\n'))
+                    {
+                        if (ligne.IndexOf("LISTENING", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                        var m = Regex.Match(ligne, @"\S+:" + port + @"\s+\S+\s+LISTENING\s+(\d+)");
+                        if (m.Success) return int.Parse(m.Groups[1].Value);
+                    }
+                }
+            }
+            catch { }
+            return 0;
+        }
+
+        public static string Nom(int pid)
+        {
+            try { return Process.GetProcessById(pid).ProcessName; }
+            catch { return "inconnu"; }
+        }
+
+        // La ligne de commande dit si le processus fautif est un daemon re:cast
+        // orphelin — cas courant apres un arret force, l'enfant node survivant a
+        // son parent — ou un logiciel tiers qu'il ne faut surtout pas tuer sans
+        // demander. WMI est le seul moyen de l'obtenir pour un autre processus.
+        public static string LigneDeCommande(int pid)
+        {
+            try
+            {
+                using (var chercheur = new System.Management.ManagementObjectSearcher(
+                    "SELECT CommandLine FROM Win32_Process WHERE ProcessId = " + pid))
+                using (var resultats = chercheur.Get())
+                {
+                    foreach (System.Management.ManagementObject o in resultats)
+                    {
+                        var v = o["CommandLine"];
+                        if (v != null) return v.ToString();
+                    }
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        // Un daemon re:cast, reconnaissable a son script. On ne se fie pas au seul
+        // nom « node » : d'autres logiciels tournent sous Node.
+        public static bool EstNotreDaemon(int pid)
+        {
+            string ligne = LigneDeCommande(pid);
+            if (string.IsNullOrEmpty(ligne)) return false;
+            ligne = ligne.Replace('/', '\\').ToLowerInvariant();
+            return ligne.Contains("\\daemon\\index.js")
+                && (ligne.Contains("re-cast") || ligne.Contains("re cast") || ligne.Contains("recast"));
         }
     }
 
@@ -186,15 +287,16 @@ namespace Recast
         int nbErreurs;
         bool redemarrage;
 
-        readonly System.Threading.SynchronizationContext ui;
+        readonly SynchronizationContext ui;
         MiseAJour.Info majDispo;
         bool majEnCours;
+        bool portOccupe;         // le daemon a refusé de démarrer, port déjà pris
 
         public TrayApp()
         {
             // Capturé ici, sur le thread d'interface : les vérifications réseau
             // tournent en tâche de fond et doivent revenir par ce canal.
-            ui = System.Threading.SynchronizationContext.Current;
+            ui = SynchronizationContext.Current;
 
             icone = new NotifyIcon
             {
@@ -285,6 +387,27 @@ namespace Recast
             {
                 Ajouter("[app] ERREUR : daemon/index.js introuvable depuis " + DossierApp());
                 return;
+            }
+
+            // Un daemon re:cast orphelin garde le port : cas courant apres un arret
+            // force, l'enfant node survivant a son parent. Comme il est indubitablement
+            // le notre, on le remplace sans rien demander. Tout autre processus, en
+            // revanche, ne sera jamais tue sans confirmation explicite.
+            int occupant = Port.Occupant(PORT);
+            if (occupant != 0 && Port.EstNotreDaemon(occupant))
+            {
+                try
+                {
+                    var vieux = Process.GetProcessById(occupant);
+                    vieux.Kill();
+                    vieux.WaitForExit(5000);
+                    Ajouter("[app] Daemon orphelin (PID " + occupant + ") remplace.");
+                    portOccupe = false;
+                }
+                catch (Exception ex)
+                {
+                    Ajouter("[app] Daemon orphelin non remplacable : " + ex.Message);
+                }
             }
 
             var psi = new ProcessStartInfo("node", "\"" + script + "\"")
@@ -418,6 +541,15 @@ namespace Recast
                     nbErreurs++;
             }
 
+            // Le daemon annonce lui-même le conflit de port : on s'en sert pour
+            // proposer le déblocage plutôt que de laisser l'app muette et inerte.
+            if (ligne.IndexOf("EADDRINUSE", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                ligne.IndexOf("déjà utilisé", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                portOccupe = true;
+                if (ui != null) ui.Post(_ => Rafraichir(), null);
+            }
+
             if (console != null && !console.IsDisposed)
                 console.BeginInvoke((Action)(() => console.Ajouter(journal[journal.Count - 1])));
         }
@@ -489,6 +621,17 @@ namespace Recast
             }
 
             menu.Items.Add(new ToolStripSeparator());
+
+            // Conflit de port : proposer le déblocage, avec le nom du processus
+            // fautif. Sans ça l'app reste inerte sans que rien n'explique pourquoi.
+            if (portOccupe && !actif)
+            {
+                var forcer = new ToolStripMenuItem("⚠  Libérer le port " + PORT + " et démarrer");
+                forcer.Font = new Font(forcer.Font, FontStyle.Bold);
+                forcer.Click += (s, e) => DemarrageForce();
+                menu.Items.Add(forcer);
+                menu.Items.Add(new ToolStripSeparator());
+            }
 
             var redem = new ToolStripMenuItem("Redémarrer le serveur");
             redem.Enabled = !redemarrage;
@@ -562,6 +705,7 @@ namespace Recast
         void Redemarrer()
         {
             redemarrage = true;
+            portOccupe = false;
             Rafraichir();
 
             Ajouter("[app] Redémarrage du serveur demandé.");
@@ -572,6 +716,64 @@ namespace Recast
 
             redemarrage = false;
             Rafraichir();
+        }
+
+        // Tue le processus qui retient le port, puis relance. On demande toujours
+        // confirmation en nommant le coupable : ce peut être un daemon lancé à la
+        // main dans un terminal, mais aussi tout autre logiciel.
+        void DemarrageForce()
+        {
+            int pid = Port.Occupant(PORT);
+
+            if (pid == 0)
+            {
+                // Plus personne dessus : le conflit s'est résolu seul entre-temps
+                Ajouter("[app] Le port " + PORT + " est libre, redémarrage direct.");
+                Redemarrer();
+                return;
+            }
+
+            if (pid == Process.GetCurrentProcess().Id ||
+                (node != null && !node.HasExited && pid == node.Id))
+            {
+                Ajouter("[app] Le port est tenu par notre propre daemon, simple redémarrage.");
+                Redemarrer();
+                return;
+            }
+
+            string nom = Port.Nom(pid);
+            string ligne = Port.LigneDeCommande(pid);
+            if (!string.IsNullOrEmpty(ligne) && ligne.Length > 110) ligne = ligne.Substring(0, 109) + "…";
+
+            var choix = MessageBox.Show(
+                "Le port " + PORT + " est utilisé par :\n\n" +
+                "    " + nom + "  (PID " + pid + ")\n" +
+                (string.IsNullOrEmpty(ligne) ? "" : "    " + ligne + "\n") +
+                "\nFermer ce processus et démarrer le serveur re:cast ?",
+                "re:cast — port occupé",
+                MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
+
+            if (choix != DialogResult.OK) return;
+
+            try
+            {
+                var p = Process.GetProcessById(pid);
+                p.Kill();
+                p.WaitForExit(5000);
+                Ajouter("[app] Processus " + nom + " (PID " + pid + ") fermé, le port est libre.");
+            }
+            catch (Exception ex)
+            {
+                Ajouter("[app] Impossible de fermer " + nom + " : " + ex.Message);
+                MessageBox.Show(
+                    "Impossible de fermer ce processus :\n\n" + ex.Message +
+                    "\n\nIl appartient peut-être à un autre utilisateur, ou nécessite " +
+                    "des droits administrateur.",
+                    "re:cast", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            Redemarrer();
         }
 
         // On passe par l'API HTTP, comme l'extension : même chemin, même état.

@@ -49,6 +49,17 @@ Télécharger puis exécuter un `.exe` mérite des garde-fous, il y en a deux et
 
 L'installation se fait en `/SILENT` et l'app se relance seule — d'où l'absence de `skipifsilent` sur l'entrée `[Run]` du script Inno Setup, sans laquelle elle ne redémarrerait jamais. Une lecture en cours est signalée avant, puisqu'elle sera interrompue.
 
+### Instance unique et conflits de port
+
+Un mutex nommé empêche un second lancement : deux apps démarreraient deux daemons qui se disputeraient le port 7171, et la seconde resterait inerte sans rien expliquer.
+
+Reste le cas où le port est pris malgré tout. **Un daemon tué de force laisse son enfant `node` vivant** — c'est le cas le plus fréquent, après un arrêt brutal ou une désinstallation. L'app distingue alors deux situations, et la nuance est délibérée :
+
+- **Un daemon re:cast orphelin** est reconnu à sa ligne de commande (lue via WMI, seul moyen pour un autre processus) et **remplacé sans rien demander** : il est indubitablement le nôtre.
+- **Tout autre processus** n'est jamais tué en silence. Le menu propose « ⚠ Libérer le port 7171 et démarrer », et la confirmation affiche le nom du processus *et sa ligne de commande*, pour que la décision soit informée.
+
+Se fier au seul nom `node` serait une erreur : d'autres logiciels tournent sous Node.
+
 **Depuis les sources :**
 
 ```powershell

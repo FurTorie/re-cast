@@ -47,6 +47,9 @@ $arguments = @(
     '/reference:System.dll'
     '/reference:System.Drawing.dll'
     '/reference:System.Windows.Forms.dll'
+    # System.Management : lire la ligne de commande d'un autre processus, pour
+    # distinguer un daemon re:cast orphelin d'un logiciel tiers sur le meme port
+    '/reference:System.Management.dll'
     (Join-Path $ici 'Recast.cs')
     $infoPath
 )
