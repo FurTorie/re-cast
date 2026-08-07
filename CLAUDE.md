@@ -32,14 +32,29 @@ git config core.hooksPath .githooks
 
 ## Présentation
 
-**re:cast** — caster une vidéo depuis Firefox vers une TV en résolution native. Deux moitiés indépendantes qui communiquent en HTTP :
+**re:cast** — caster une vidéo depuis Firefox vers une TV en résolution native. **Trois** morceaux, chacun avec sa version et sa publication :
 
 - `extension/` — add-on Firefox **Manifest V2**. Détecte les URLs de stream dans le trafic réseau et propose un sélecteur d'appareil.
 - `daemon/` — serveur Node + Express sur le port **7171**. Découvre les appareils du réseau local, proxifie les streams, parle Chromecast / DLNA / AirPlay.
+- `app/` — app Windows en C# (icône de zone de notification) qui lance et surveille le daemon. **Elle l'embarque dans son installateur**, ce qui la rend dépendante de lui.
 
 L'extension ne parle jamais directement à une TV : elle ne fait que POSTer vers le daemon.
 
 Les commentaires et toutes les chaînes visibles par l'utilisateur sont en **français**. Respecter cette convention pour tout nouveau code.
+
+### Les versions, et le piège du troisième morceau
+
+Chaque morceau est publié par son propre workflow, piloté par son numéro de version — rien ne part tant que ce numéro n'a pas bougé, et un garde-fou **fait échouer le build** si les fichiers ont changé sans lui :
+
+| Morceau | Version dans | Workflow | Déclenché par |
+|---|---|---|---|
+| Extension | `extension/manifest.json` | `release-extension.yml` | `extension/**` |
+| Daemon | `daemon/package.json` | `release-daemon.yml` | `daemon/**` |
+| App | `app/version.txt` | `release-app.yml` | `app/**` **et `daemon/**`** |
+
+**Toucher à `daemon/` oblige donc à incrémenter DEUX versions** : `daemon/package.json` et `app/version.txt`. Oublier la seconde casse la publication de l'app — vécu en 0.1.11, où seules l'extension et le daemon avaient été bumpés. Le garde-fou a bien fait son travail : sans lui l'installateur aurait continué à livrer silencieusement un daemon périmé.
+
+Ne jamais éditer `updates.json` ni `app-latest.json` à la main : les workflows les écrivent **après** la release, pour que le lien de téléchargement qu'ils contiennent soit déjà valide, puis les committent eux-mêmes. Il faut donc `git pull` après chaque publication.
 
 ## Plateforme cible
 
