@@ -1,0 +1,109 @@
+name: Publier l'app Windows
+
+# Même principe que les deux autres moitiés : piloté par app/version.txt, et rien
+# ne part tant que ce numéro n'a pas changé.
+#
+# Tourne sur windows-latest : la compilation utilise le csc.exe du .NET Framework,
+# présent d'office sur l'image, et Inno Setup pour l'installateur.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'daemon/**'          # le daemon est embarqué dans l'installateur
+      - '.github/workflows/release-app.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publier:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+
+      - name: Lire la version de l'app
+        id: v
+        shell: pwsh
+        run: |
+          $version = (Get-Content app/version.txt -Raw).Trim()
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Version invalide : '$version'" }
+          "version=$version"    >> $env:GITHUB_OUTPUT
+          "tag=app-v$version"   >> $env:GITHUB_OUTPUT
+
+      - name: Cette version est-elle déjà publiée ?
+        id: check
+        shell: bash
+        run: |
+          if git rev-parse "refs/tags/${{ steps.v.outputs.tag }}" >/dev/null 2>&1; then
+            echo "publier=non" >> "$GITHUB_OUTPUT"
+            echo "::notice::Version ${{ steps.v.outputs.version }} déjà publiée — rien à faire."
+          else
+            echo "publier=oui" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.publier == 'oui'
+        with:
+          node-version: 20
+
+      # Les dépendances du daemon partent dans l'installateur : la machine de
+      # l'utilisateur n'aura pas à lancer npm install.
+      - name: Installer les dépendances du daemon
+        if: steps.check.outputs.publier == 'oui'
+        working-directory: daemon
+        shell: bash
+        run: npm ci --omit=dev || npm install --omit=dev
+
+      - name: Contrôle de syntaxe du daemon
+        if: steps.check.outputs.publier == 'oui'
+        working-directory: daemon
+        shell: bash
+        run: |
+          for f in index.js server.js proxy.js discovery.js state.js cast/*.js; do
+            node --check "$f"
+          done
+
+      - name: Compiler l'app
+        if: steps.check.outputs.publier == 'oui'
+        shell: pwsh
+        run: ./app/build.ps1
+
+      - name: Installer Inno Setup
+        if: steps.check.outputs.publier == 'oui'
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Construire l'installateur
+        if: steps.check.outputs.publier == 'oui'
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { $iscc = "$env:ProgramFiles\Inno Setup 6\ISCC.exe" }
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe introuvable apres installation" }
+          & $iscc "/DAppVersion=${{ steps.v.outputs.version }}" app/installer.iss
+          if ($LASTEXITCODE -ne 0) { throw "Echec de la construction de l'installateur" }
+          Get-ChildItem dist -Filter *.exe | ForEach-Object {
+            "{0}  ({1} Mo)" -f $_.Name, [math]::Round($_.Length/1MB,1)
+          }
+
+      - name: Publier la release
+        if: steps.check.outputs.publier == 'oui'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.v.outputs.tag }}
+          name: App Windows ${{ steps.v.outputs.version }}
+          body: |
+            App re:cast pour Windows ${{ steps.v.outputs.version }}.
+
+            Télécharger `recast-setup-${{ steps.v.outputs.version }}.exe` et l'exécuter.
+            Aucun droit administrateur nécessaire.
+
+            L'installateur contient l'app **et** le daemon avec ses dépendances.
+            **Node.js doit être installé sur la machine** — l'installateur le vérifie
+            et prévient si ce n'est pas le cas.
+          files: dist/*.exe

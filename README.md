@@ -38,6 +38,10 @@ New-NetFirewallRule -DisplayName "re:cast daemon (7171)" -Direction Inbound -Pro
 
 Plutôt que de garder un terminal ouvert, l'app place une icône dans la zone de notification et maintient le daemon en arrière-plan.
 
+**Installation :** télécharger `recast-setup-X.Y.Z.exe` depuis les [releases](../../releases) et l'exécuter. Aucun droit administrateur n'est demandé. L'installateur contient l'app **et** le daemon avec ses dépendances — seul Node.js doit être présent sur la machine, ce qu'il vérifie et signale.
+
+**Depuis les sources :**
+
 ```powershell
 .\app\build.ps1
 ```
@@ -46,7 +50,7 @@ Plutôt que de garder un terminal ouvert, l'app place une icône dans la zone de
 .\app\Recast.exe
 ```
 
-La compilation utilise le compilateur C# livré avec Windows — aucun SDK, aucune dépendance npm. L'exécutable pèse **16 Ko**.
+La compilation utilise le compilateur C# livré avec Windows — aucun SDK, aucune dépendance npm. L'exécutable pèse **18 Ko**. La version vient de `app/version.txt`, qui pilote aussi la publication ; `build.ps1` l'injecte dans les propriétés du fichier et génère `icon.ico` à partir du PNG.
 
 Le menu, au clic sur l'icône, donne :
 
@@ -114,6 +118,7 @@ Les deux moitiés se versionnent séparément, et chacune déclenche sa propre p
 |---|---|
 | `extension/manifest.json` → `version` | signature par Mozilla, puis release GitHub du `.xpi` |
 | `daemon/package.json` → `version` | archive du daemon en release GitHub |
+| `app/version.txt` | compilation, installateur Inno Setup, release GitHub du `.exe` |
 
 Rien ne part tant que le numéro de version n'a pas changé : un tag `extension-vX.Y.Z` ou `daemon-vX.Y.Z` marque ce qui est déjà publié. Republier une version déjà connue d'AMO échouerait de toute façon côté Mozilla.
 
