@@ -3,13 +3,25 @@
 
 const DAEMON_URL = 'http://localhost:7171';
 
-// Charger l'URL daemon depuis le storage
-browser.storage.local.get('daemonUrl').then(s => {
-  if (s.daemonUrl) window._recastDaemonUrl = s.daemonUrl;
-}).catch(() => {});
+// Le chargement est asynchrone, et un clic survenant avant sa résolution
+// retombait sur localhost — une adresse qui ne désigne jamais le daemon depuis
+// un téléphone. On garde la promesse plutôt que son résultat, pour pouvoir
+// l'attendre au lieu de deviner.
+const daemonPret = browser.storage.local.get('daemonUrl')
+  .then(s => { if (s.daemonUrl) window._recastDaemonUrl = s.daemonUrl; })
+  .catch(() => {});
 
 function getDaemonUrl() {
   return window._recastDaemonUrl || DAEMON_URL;
+}
+
+// À appeler avant toute requête : garantit que le storage a été lu.
+// La détection automatique, elle, reste au popup — le panneau injecté est un
+// confort desktop, et balayer le réseau depuis chaque page visitée serait
+// disproportionné.
+async function daemonUrlPret() {
+  await daemonPret;
+  return getDaemonUrl();
 }
 
 // ─── Injection ────────────────────────────────────────────────────────────────
@@ -121,7 +133,7 @@ async function openCastPanel(anchorBtn, videoEl) {
   // Charger les appareils
   const deviceList = panel.querySelector('.recast-panel-devices');
   try {
-    const res = await fetch(`${getDaemonUrl()}/devices`, { signal: AbortSignal.timeout(6000) });
+    const res = await fetch(`${await daemonUrlPret()}/devices`, { signal: AbortSignal.timeout(6000) });
     const devices = await res.json();
     if (!devices.length) {
       deviceList.innerHTML = '<li class="recast-panel-loading">Aucun appareil</li>';
@@ -144,7 +156,7 @@ async function openCastPanel(anchorBtn, videoEl) {
   // Bouton stop
   panel.querySelector('.recast-panel-stop').addEventListener('click', async (e) => {
     e.stopPropagation();
-    await fetch(`${getDaemonUrl()}/stop`, { method: 'POST' }).catch(() => {});
+    await fetch(`${await daemonUrlPret()}/stop`, { method: 'POST' }).catch(() => {});
     cleanup();
   });
 
@@ -171,7 +183,7 @@ async function castToDevice(device, li, stream, panel) {
 
   li.textContent = '⏳ Casting...';
   try {
-    const res = await fetch(`${getDaemonUrl()}/cast`, {
+    const res = await fetch(`${await daemonUrlPret()}/cast`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

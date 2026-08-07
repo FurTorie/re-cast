@@ -1,6 +1,15 @@
 // re:cast - popup.js
 
-const DEFAULT_DAEMON = 'http://192.168.1.14:7171';
+// localhost plutôt qu'une IP de LAN codée en dur : c'est juste sur le poste qui
+// fait tourner le daemon, et sans effet ailleurs — là où « 192.168.1.14 »
+// désignait, chez quelqu'un d'autre, une machine au hasard de son réseau.
+// Sur téléphone, la détection automatique prend le relais.
+const DEFAULT_DAEMON = 'http://localhost:7171';
+const PORT_DAEMON = 7171;
+
+// Une adresse n'est retenue que si /status s'annonce re:cast. Un simple HTTP 200
+// ne suffit pas : n'importe quel appareil peut écouter sur ce port.
+const SIGNATURE = 're:cast';
 
 // Envoyée à chaque requête : le daemon la journalise, pour qu'un rapport de bug
 // indique quelle version de chaque moitié tournait.
@@ -36,13 +45,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btn-scan').addEventListener('click', onScan);
   document.getElementById('btn-add-manual').addEventListener('click', onAddManual);
   document.getElementById('btn-save-daemon').addEventListener('click', saveDaemonUrl);
+  document.getElementById('btn-detect-daemon').addEventListener('click', onDetect);
   document.getElementById('daemon-ip-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') saveDaemonUrl();
   });
 
   await loadCurrentStream();
-  const online = await checkDaemonStatus();
-  if (!online) return;
+  let online = await checkDaemonStatus();
+
+  // Détection déclenchée par l'ÉCHEC, jamais à chaque ouverture. Balayer le
+  // réseau à chaque fois serait long et inutile alors que l'adresse enregistrée
+  // est bonne 99 fois sur 100. Le cas qu'on veut rattraper est précis : le
+  // daemon a changé d'IP après un bail DHCP, et l'utilisateur n'a aucune raison
+  // de le savoir.
+  if (!online) {
+    online = !!(await onDetect());
+    if (!online) return;
+  }
 
   // Rafraîchissement rapide : le daemon répond depuis son cache, pas de scan de 4s
   await refreshFromDaemon({ scan: false });
@@ -112,6 +131,115 @@ async function saveDaemonUrl() {
 
   await checkDaemonStatus();
   await refreshFromDaemon({ scan: false });
+}
+
+// ─── Détection automatique du daemon ─────────────────────────────────────────
+// Pas de mDNS ici : une extension n'a aucune API de socket UDP. Mais avec la
+// permission d'hôte universelle, fetch() n'est pas soumis au CORS et peut donc
+// interroger une IP du réseau local en HTTP. On sonde, et on identifie par la
+// signature de /status.
+
+async function sonder(url, delai) {
+  try {
+    const res = await fetch(`${url}/status`, {
+      headers: ENTETES,
+      signal: AbortSignal.timeout(delai)
+    });
+    if (!res.ok) return false;
+    const j = await res.json();
+    return j && j.app === SIGNATURE;
+  } catch {
+    return false;
+  }
+}
+
+// Les sous-réseaux à explorer, du plus probable au moins probable.
+//
+// Le meilleur indice n'est pas une plage standard mais les appareils déjà
+// enregistrés : une TV castée un jour est forcément sur le même réseau que le
+// daemon. Vient ensuite le sous-réseau de la dernière adresse connue, qui suffit
+// quand seule la fin de l'IP a changé après un bail DHCP — de loin le cas le
+// plus fréquent. Les plages génériques ne servent qu'au tout premier lancement.
+function sousReseaux() {
+  const vus = [];
+  // Deux entrées distinctes, et c'est nécessaire : une IP d'appareil porte
+  // quatre octets, une plage de repli n'en a que trois. Une seule fonction
+  // exigeant quatre octets rejetait silencieusement TOUTES les plages de repli,
+  // et le premier lancement — précisément le cas où le balayage sert — ne
+  // sondait rien du tout.
+  const ajouterPrefixe = (p) => { if (p && !vus.includes(p)) vus.push(p); };
+  const depuisIp = (ip) => {
+    const m = /^(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}$/.exec(ip || '');
+    if (m) ajouterPrefixe(m[1]);
+  };
+
+  saved.forEach(d => depuisIp(d.host));
+  depuisIp((DAEMON_URL.match(/(\d{1,3}(?:\.\d{1,3}){3})/) || [])[1]);
+  ['192.168.1', '192.168.0', '10.0.0', '192.168.2'].forEach(ajouterPrefixe);
+
+  return vus;
+}
+
+// Sonde un /24 par lots. Un port fermé sur le LAN est refusé en quelques
+// millisecondes ; seules les IP inexistantes vont au bout du délai, d'où un
+// délai court et beaucoup de requêtes en parallèle.
+async function balayer(prefixe, delai = 1200, lot = 32) {
+  for (let debut = 1; debut < 255; debut += lot) {
+    const cibles = [];
+    for (let i = debut; i < Math.min(debut + lot, 255); i++) {
+      cibles.push(`http://${prefixe}.${i}:${PORT_DAEMON}`);
+    }
+    const resultats = await Promise.all(
+      cibles.map(async url => (await sonder(url, delai)) ? url : null)
+    );
+    const trouve = resultats.find(Boolean);
+    if (trouve) return trouve;
+  }
+  return null;
+}
+
+// Retourne l'URL trouvée, ou null. `annoncer` sert à tenir l'utilisateur informé :
+// un balayage peut prendre plusieurs secondes et un popup muet passerait pour figé.
+async function detecterDaemon(annoncer = () => {}) {
+  // 1. Les adresses directes d'abord : instantanées, et localhost suffit sur le
+  //    poste qui héberge le daemon.
+  annoncer('Recherche du daemon…');
+  for (const url of [DAEMON_URL, DEFAULT_DAEMON, `http://127.0.0.1:${PORT_DAEMON}`]) {
+    if (url && await sonder(url, 1500)) return url;
+  }
+
+  // 2. Balayage des sous-réseaux plausibles.
+  const prefixes = sousReseaux();
+  for (let i = 0; i < prefixes.length; i++) {
+    annoncer(`Balayage ${prefixes[i]}.0/24  (${i + 1}/${prefixes.length})…`);
+    const trouve = await balayer(prefixes[i]);
+    if (trouve) return trouve;
+  }
+  return null;
+}
+
+async function onDetect() {
+  const hint = document.getElementById('daemon-hint');
+  const btn  = document.getElementById('btn-detect-daemon');
+  const annoncer = (t) => { hint.hidden = false; hint.textContent = t; };
+
+  btn.disabled = true;
+  try {
+    const trouve = await detecterDaemon(annoncer);
+    if (trouve) {
+      DAEMON_URL = trouve;
+      await browser.storage.local.set({ daemonUrl: trouve });
+      document.getElementById('daemon-ip-input').value = trouve;
+      annoncer(`Daemon trouvé : ${trouve.replace('http://', '')}`);
+      await checkDaemonStatus();
+      await refreshFromDaemon({ scan: false });
+      return trouve;
+    }
+    annoncer('Aucun daemon trouvé — vérifiez qu\'il tourne, et saisissez son IP.');
+    return null;
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function checkDaemonStatus() {

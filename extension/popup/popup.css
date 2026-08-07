@@ -241,7 +241,8 @@ h1 {
 #daemon-ip-input:focus { border-color: #e74c3c; }
 #daemon-ip-input::placeholder { color: #555; }
 
-#btn-save-daemon {
+#btn-save-daemon,
+#btn-detect-daemon {
   background: #0f3460;
   color: #eee;
   border: none;
@@ -255,6 +256,19 @@ h1 {
 
 #btn-save-daemon:hover  { background: #2ecc71; color: #fff; }
 #btn-save-daemon:active { background: #27ae60; color: #fff; }
+
+#btn-detect-daemon:hover  { background: #3498db; color: #fff; }
+#btn-detect-daemon:active { background: #2980b9; color: #fff; }
+#btn-detect-daemon:disabled { opacity: 0.5; cursor: default; }
+
+/* Le balayage peut durer plusieurs secondes : sans retour visible, le popup
+   passerait pour figé. */
+.daemon-hint {
+  margin: 4px 2px 0;
+  font-size: 11px;
+  color: #8a93a8;
+  line-height: 1.4;
+}
 
 /* ── Ajout manuel ──────────────────────────────────────────────────────────── */
 

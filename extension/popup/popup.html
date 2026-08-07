@@ -15,8 +15,10 @@
 
     <div id="daemon-config">
       <input id="daemon-ip-input" type="text" placeholder="IP du daemon (ex: 192.168.1.14:7171)" />
+      <button id="btn-detect-daemon" title="Chercher le daemon sur le réseau">🔎</button>
       <button id="btn-save-daemon" title="Enregistrer l'adresse du daemon">✓</button>
     </div>
+    <p id="daemon-hint" class="daemon-hint" hidden></p>
 
     <section id="stream-section">
       <p class="label">Stream détecté</p>

@@ -300,7 +300,20 @@ Subtilité mDNS : le SRV pointe vers un nom `.local` dont l'adresse arrive dans 
 
 ### Résolution de l'URL du daemon dans l'extension
 
-Le popup écrit `daemonUrl` dans `browser.storage.local` et prend par défaut une IP LAN codée en dur (`http://192.168.1.14:7171`). Le content script lit la même clé mais la charge **de façon asynchrone dans une globale `window`**, avec un repli sur `http://localhost:7171` — un clic survenant avant la résolution utilise donc localhost. À garder en tête pour déboguer un « daemon hors ligne » dans le panel injecté mais pas dans le popup.
+Le popup écrit `daemonUrl` dans `browser.storage.local`. Le défaut est `http://localhost:7171` — juste sur le poste qui héberge le daemon, sans effet ailleurs. Il remplace une IP LAN codée en dur (`192.168.1.14`) qui, chez quelqu'un d'autre, désignait une machine au hasard de son réseau.
+
+**Détection automatique.** `detecterDaemon()` sonde des adresses candidates et n'en retient une que si `GET /status` répond `app: "re:cast"`. Un simple HTTP 200 ne suffit pas : n'importe quel appareil peut écouter sur 7171. Ordre : adresses directes (enregistrée, `localhost`, `127.0.0.1`), puis balayage de `/24`.
+
+Le choix des `/24` à balayer vient d'un indice qu'on a déjà sous la main : **les IP des appareils enregistrés**. Une TV castée un jour est forcément sur le réseau du daemon. Vient ensuite le sous-réseau de la dernière adresse connue — suffisant quand seul le dernier octet a changé après un bail DHCP, le cas de loin le plus fréquent. Les plages génériques (`192.168.1`, `192.168.0`, `10.0.0`, `192.168.2`) ne servent qu'au premier lancement.
+
+Deux points à ne pas défaire :
+
+- `sousReseaux()` distingue **deux** entrées, une pour les IP complètes et une pour les préfixes. Une seule fonction exigeant quatre octets rejetait silencieusement toutes les plages de repli, et le premier lancement — le cas où le balayage sert le plus — ne sondait rien.
+- La détection se déclenche **sur échec**, jamais à chaque ouverture. Balayer le réseau systématiquement serait long et inutile alors que l'adresse enregistrée est bonne presque toujours. Le bouton 🔎 permet de la forcer.
+
+Pas de mDNS ici : une extension n'a aucune API de socket UDP. Ce qui rend le balayage possible, c'est que la permission d'hôte universelle exempte `fetch()` du CORS.
+
+Le content script lit la même clé, mais son chargement est asynchrone : un clic survenant avant la résolution retombait sur `localhost`, adresse qui ne désigne jamais le daemon depuis un téléphone. `daemonUrlPret()` attend désormais la promesse avant chaque requête. Il ne fait pas de détection automatique — balayer le réseau depuis chaque page visitée serait disproportionné pour un confort desktop.
 
 ### CORS : deux régimes, à ne surtout pas unifier
 
