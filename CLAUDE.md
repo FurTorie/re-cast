@@ -198,6 +198,8 @@ Piège à ne pas réintroduire : `server.js` exporte l'**app Express**, pas le s
    | Extension de l'URL proxy | `.mp4` | `.ts` |
    | En-têtes DLNA | profil `AVC_MP4_…` | **aucun** |
 
+   **Et sur le manifeste lui-même, `DLNA.ORG_PN` doit disparaître** — voir plus bas, c'est le piège le plus subtil de la chaîne.
+
    Le dernier est le plus contre-intuitif : `contentFeatures.dlna.org` annonce un profil **MP4** ; le poser sur une réponse `video/mp2t` fait attendre du MP4 à la TV, qui referme. Ces en-têtes décrivent **la ressource désignée à la TV**, pas ses morceaux internes — d'où le drapeau `segment` porté par `streamStore` et propagé jusqu'aux en-têtes.
 
    Le symptôme des trois est identique : la TV réclame `seg-1` puis referme la connexion, ce que le log montre par `Client parti avant la fin`. C'est un signal de contradiction, pas de panne réseau. Sur un MP4 progressif rien ne change, puisqu'il n'y a pas de segment.
@@ -207,6 +209,19 @@ Piège à ne pas réintroduire : `server.js` exporte l'**app Express**, pas le s
 8. Les codes d'erreur SOAP **704** (restriction PrepareForConnection) et **705** (TransportLocked) sont traités comme des succès — la TV joue généralement quand même.
 
 Toucher au forçage du MIME, au suffixe `.mp4` ou au schéma d'IDs courts casse la lecture Samsung.
+
+### `DLNA.ORG_PN` : le mensonge à ne PAS faire
+
+`Content-Type` et `DLNA.ORG_PN` n'ont pas la même portée, et c'est ce qui rend ce piège coûteux à trouver.
+
+- `Content-Type: video/mp4` est un **indice** que Samsung utilise pour accepter la ressource. Le mensonge y est nécessaire.
+- `DLNA.ORG_PN=AVC_MP4_MP_SD_AAC_MULT5` désigne un **profil complet** : conteneur MP4, codec AVC Main Profile, définition SD. La TV **configure son pipeline de décodage à partir de cette déclaration, avant même de lire le flux**.
+
+Sur du HLS, ce profil est faux sur les trois axes — le conteneur réel est du MPEG-TS, souvent en HD. Certaines TV redétectent et s'en remettent ; d'autres montent le mauvais pipeline et **plantent dès la première image**. Symptôme : « la lecture se lance et coupe instantanément, sans jamais afficher d'image ». Mesuré sur un Samsung DU7000, là où un Q70F ne bronchait pas.
+
+`profilDlna()` ne déclare donc **aucun PN pour une playlist**, et conserve les drapeaux de capacité (`DLNA.ORG_OP=01`, `DLNA.ORG_FLAGS`) : ceux-là décrivent ce que *le serveur* sait faire, pas ce que contient le média. Ne rien déclarer vaut mieux que déclarer faux — sans PN, la TV analyse le contenu elle-même.
+
+Le PN reste sur un MP4 progressif, où il est au moins exact quant au conteneur.
 
 ### Performance du proxy : cinq pièges déjà payés
 

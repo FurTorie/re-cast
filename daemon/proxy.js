@@ -104,6 +104,28 @@ function registerStream(streamUrl, referer, {
   return proxyUrl;
 }
 
+// En-tête contentFeatures.dlna.org.
+//
+// DLNA.ORG_PN ne décrit pas un type MIME, il désigne un PROFIL COMPLET : conteneur,
+// codec, définition. `AVC_MP4_MP_SD_AAC_MULT5` annonce du MP4 AVC en définition
+// standard, et la TV configure son décodeur en conséquence AVANT de lire le flux.
+//
+// Sur du HLS c'est un mensonge d'une autre nature que celui du Content-Type : le
+// conteneur réel est du MPEG-TS, souvent en HD. Certaines TV redétectent et s'en
+// remettent ; d'autres font confiance au profil déclaré, montent le mauvais pipeline
+// et plantent dès la première image — symptôme « la lecture se lance et coupe
+// aussitôt », observé sur un Samsung DU7000.
+//
+// Ne rien déclarer vaut mieux que déclarer faux : sans PN, la TV analyse le contenu.
+// Les drapeaux de capacité, eux, restent — ils disent ce qu'on sait faire, pas ce
+// que contient le média.
+function profilDlna(estPlaylist) {
+  const capacites = 'DLNA.ORG_OP=01;DLNA.ORG_FLAGS=01500000000000000000000000000000';
+  return estPlaylist
+    ? capacites
+    : 'DLNA.ORG_PN=AVC_MP4_MP_SD_AAC_MULT5;' + capacites;
+}
+
 // Extension réelle d'une URL, query string retirée
 function extensionDe(url) {
   const chemin = String(url).split(/[?#]/)[0];
@@ -294,7 +316,7 @@ function fetchAndProxy(target, referer, req, res, mode = 'samsung', attempt = 0,
           // profil MP4, recevait du TS, et refermait dès le premier segment.
           ...(estSegment ? {} : {
             'transferMode.dlna.org':    'Streaming',
-            'contentFeatures.dlna.org': 'DLNA.ORG_PN=AVC_MP4_MP_SD_AAC_MULT5;DLNA.ORG_OP=01;DLNA.ORG_FLAGS=01500000000000000000000000000000'
+            'contentFeatures.dlna.org': profilDlna(isM3u8)
           })
         };
 
