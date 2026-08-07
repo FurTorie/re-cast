@@ -158,7 +158,21 @@ function streamHandler(req, res) {
   const id = req.params.id.replace(/\.[a-z0-9]{1,5}$/i, '');
   const entry = streamStore[id];
 
+  // Journaliser ce que DEMANDE l'appareil. Sans ça, le log ne montre que nos
+  // requêtes sortantes : on voit ce qu'on va chercher, jamais ce qui nous a été
+  // demandé, ni avec quelle méthode ni quelles plages. Impossible de comprendre
+  // un lecteur qui referme sans savoir ce qu'il attendait.
+  const details = [
+    req.method,
+    req.headers.range ? `Range: ${req.headers.range}` : null,
+    req.headers['getcontentfeatures.dlna.org'] ? 'demande le profil DLNA' : null,
+    req.headers['transfermode.dlna.org'] ? `transferMode: ${req.headers['transfermode.dlna.org']}` : null
+  ].filter(Boolean).join('  ');
+  console.log(`[re:cast] ← ${details}  /stream/${req.params.id}`);
+  console.log(`[re:cast]   client ${clientIp(req)} · ${(req.headers['user-agent'] || 'sans User-Agent').slice(0, 70)}`);
+
   if (!entry) {
+    console.error(`[re:cast] ⚠ Flux ${id} inconnu — 404 renvoyé.`);
     res.status(404).send('Stream not found');
     return;
   }
@@ -232,6 +246,8 @@ function fetchAndProxy(target, referer, req, res, mode = 'samsung', attempt = 0,
   // coupure qu'on provoque nous-même en nettoyant ressort comme une panne du CDN,
   // et le log devient inexploitable pour diagnostiquer.
   let clientGone = false;
+  let octetsEnvoyes = 0;
+  let octetsAttendus = 0;
 
   const proxyReq = lib.request(options, (proxyRes) => {
     // Le délai plus bas ne doit couvrir QUE l'établissement de la réponse. Une fois le
@@ -375,7 +391,11 @@ function fetchAndProxy(target, referer, req, res, mode = 'samsung', attempt = 0,
     } else {
       if (proxyRes.headers['content-length']) {
         headers['Content-Length'] = proxyRes.headers['content-length'];
+        octetsAttendus = parseInt(proxyRes.headers['content-length'], 10) || 0;
       }
+      // Compter ce qui part réellement : c'est la seule façon de distinguer un
+      // lecteur qui refuse d'emblée d'un lecteur qui lit puis renonce.
+      proxyRes.on('data', (c) => { octetsEnvoyes += c.length; });
       res.writeHead(proxyRes.statusCode, headers);
       proxyRes.pipe(res);
     }
@@ -422,8 +442,10 @@ function fetchAndProxy(target, referer, req, res, mode = 'samsung', attempt = 0,
     if (res.writableEnded) return;
     clientGone = true;
     // C'est l'appareil qui a raccroché, pas le CDN : le distinguer explicitement,
-    // car les deux cas appellent des corrections opposées.
-    console.log(`[re:cast] Client parti avant la fin — abandon: ${target.substring(0, 70)}`);
+    // car les deux cas appellent des corrections opposées. Le volume déjà transmis
+    // départage « il a refusé d'entrée » de « il a lu puis renoncé ».
+    const attendu = octetsAttendus ? ` sur ${octetsAttendus}` : '';
+    console.log(`[re:cast] Client parti après ${octetsEnvoyes} octet(s)${attendu} — abandon`);
     proxyReq.destroy();
   });
 
