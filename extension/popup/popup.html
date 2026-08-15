@@ -11,13 +11,20 @@
 
     <header>
       <span class="marque">re<span class="marque-sep">:</span>cast</span>
-      <!-- La pastille est l'entrée UNIQUE vers la gestion des serveurs : elle en
-           montre l'état (point vert / orange) et le nom du serveur actif. -->
-      <button id="btn-serveurs" class="pastille" title="Gérer les serveurs re:cast">
-        <span id="pastille-point" class="pastille-point"></span>
-        <span id="pastille-nom">…</span>
-        <span class="ico" data-ico="chevron-droite"></span>
-      </button>
+      <div class="entete-actions">
+        <!-- Firefox ne transmet pas aux pages d'extension son réglage
+             « Apparence des sites web » : sans ce bouton, le popup ne pourrait
+             suivre que le thème du navigateur. Il fait tourner
+             automatique → clair → sombre ; son icône dit l'état courant. -->
+        <button id="btn-theme" class="btn-theme"></button>
+        <!-- La pastille est l'entrée UNIQUE vers la gestion des serveurs : elle en
+             montre l'état (point vert / orange) et le nom du serveur actif. -->
+        <button id="btn-serveurs" class="pastille" title="Gérer les serveurs re:cast">
+          <span id="pastille-point" class="pastille-point"></span>
+          <span id="pastille-nom">…</span>
+          <span class="ico" data-ico="chevron-droite"></span>
+        </button>
+      </div>
     </header>
 
     <!-- Bandeau d'alerte, visible sur la vue principale uniquement -->

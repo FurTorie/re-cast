@@ -90,7 +90,18 @@ const ICONES = {
     'M14 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0',
     'M21 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0'
   ] },
-  'stop':           { taille: 15, plein: true, d: ['M8 5h8a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3Z'] }
+  'stop':           { taille: 15, plein: true, d: ['M8 5h8a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3Z'] },
+  // Les trois états du bouton de thème
+  'soleil':         { taille: 15, trait: 2, d: [
+    'M12 7.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9',
+    'M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22',
+    'M4.9 4.9 6.7 6.7M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8'
+  ] },
+  'lune':           { taille: 15, trait: 2, d: ['M20.5 14.8A8.5 8.5 0 0 1 9.2 3.5a8.5 8.5 0 1 0 11.3 11.3Z'] },
+  'systeme':        { taille: 15, trait: 2, d: [
+    'M4 5.5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1Z',
+    'M9 20.5h6', 'M12 16.5v4'
+  ] }
 };
 
 function icone(nom, options = {}) {
@@ -131,6 +142,42 @@ function boutonIcone(nom, titre, classe, onClick, options) {
   return btn;
 }
 
+// ─── Thème ────────────────────────────────────────────────────────────────────
+// Firefox ne transmet PAS aux pages d'extension son réglage « Apparence des
+// sites web » : celui-ci ne vaut que pour le contenu web, et une page
+// moz-extension:// suit le THÈME du navigateur. Sans ce réglage, afficher le
+// popup en clair imposait de basculer tout Firefox en clair.
+// 'auto' laisse faire le CSS (aucun attribut posé) ; les deux autres l'emportent.
+
+const THEMES = ['auto', 'clair', 'sombre'];
+
+const THEME_ICONE = { auto: 'systeme', clair: 'soleil', sombre: 'lune' };
+
+const THEME_TITRE = {
+  auto:   'Thème : celui de Firefox — cliquer pour forcer le clair',
+  clair:  'Thème : clair — cliquer pour forcer le sombre',
+  sombre: 'Thème : sombre — cliquer pour suivre Firefox'
+};
+
+let theme = 'auto';
+
+function appliquerTheme() {
+  const racine = document.documentElement;
+  if (theme === 'auto') racine.removeAttribute('data-theme');
+  else racine.setAttribute('data-theme', theme);
+
+  const bouton = document.getElementById('btn-theme');
+  bouton.replaceChildren(icone(THEME_ICONE[theme]));
+  bouton.title = THEME_TITRE[theme];
+  bouton.setAttribute('aria-label', THEME_TITRE[theme]);
+}
+
+function basculerTheme() {
+  theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
+  appliquerTheme();
+  browser.storage.local.set({ theme }).catch(() => {});
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -141,8 +188,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   const stored = await browser.storage.local.get([
-    'servers', 'activeServerId', 'daemonUrl', 'savedDevices', 'lastDeviceId'
+    'servers', 'activeServerId', 'daemonUrl', 'savedDevices', 'lastDeviceId', 'theme'
   ]);
+
+  // Le thème d'abord, et avant tout rendu : un choix explicite ne se lit qu'après
+  // le storage, donc tout ce qui s'affiche avant apparaîtrait dans l'autre thème.
+  theme = THEMES.includes(stored.theme) ? stored.theme : 'auto';
+  appliquerTheme();
 
   saved      = Array.isArray(stored.savedDevices) ? stored.savedDevices : [];
   selectedId = stored.lastDeviceId || null;
@@ -174,6 +226,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 function brancherEvenements() {
   const clic = (id, fn) => document.getElementById(id).addEventListener('click', fn);
 
+  clic('btn-theme',      basculerTheme);
   clic('btn-serveurs',   () => aller('serveurs'));
   clic('btn-reparer',    () => { aller('serveurs'); lancerDetection(); });
   document.querySelectorAll('[data-retour]').forEach(btn => {

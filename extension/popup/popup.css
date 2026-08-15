@@ -1,10 +1,18 @@
 /* re:cast - popup.css
    Design issu de la maquette Claude Design (design/project/re-cast.dc.html).
 
-   Un seul jeu de règles, deux thèmes : toutes les couleurs passent par des
-   variables, et `prefers-color-scheme` bascule l'ensemble. La maquette présente
-   les deux thèmes côte à côte pour les comparer — dans le produit c'est le
-   réglage du système qui tranche, il n'y a donc pas d'interrupteur.
+   Un seul jeu de règles, deux thèmes : chaque couleur s'écrit
+   `light-dark(clair, sombre)` et se résout d'après le `color-scheme` calculé sur
+   `:root`. C'est donc lui, et lui seul, qu'on bascule — trois sélecteurs en tout
+   et pas une ligne de couleur en double.
+
+   Le thème suit Firefox par défaut, et le bouton de l'en-tête permet de le
+   forcer en posant `data-theme="clair"` ou `"sombre"` sur `<html>` (attribut
+   absent en mode automatique). Ce réglage n'est pas un ornement : **Firefox ne
+   transmet pas aux pages d'extension le réglage « Apparence des sites web »**,
+   qui ne vaut que pour le contenu web. Une page `moz-extension://` suit le
+   THÈME du navigateur. Sans ce bouton, afficher re:cast en clair imposait de
+   basculer tout Firefox en clair — signalé à l'usage.
 
    La maquette est dessinée en Archivo / IBM Plex Mono (Google Fonts). Un popup
    d'extension ne peut pas aller chercher une police distante — la CSP l'interdit
@@ -13,93 +21,82 @@
    dessin d'Archivo. */
 
 :root {
-  --fond:            #141519;
-  --texte:           #f2f2f5;
-  --texte-2:         #848494;   /* titres de section, libellés discrets */
-  --texte-3:         #6e6e80;   /* textes d'aide */
-  --meta:            #9a9aa8;   /* seconde ligne d'une carte */
+  /* Sombre par défaut. Le `color-scheme` ne sert pas qu'à `light-dark()` : il
+     aligne aussi les éléments rendus par le navigateur — champs de saisie,
+     curseur de texte, barre de défilement — qui restaient sinon dans le mauvais
+     registre. */
+  color-scheme: dark;
 
-  --accent:          #e8503f;
-  --accent-clair:    #ff8f80;   /* accent lisible sur fond sombre */
-  --accent-survol:   #f2705f;
-  --accent-faible:   rgba(232,80,63,0.16);
-  --accent-bord:     rgba(232,80,63,0.45);
-  --accent-selection: rgba(232,80,63,0.14);
+  --fond:            light-dark(#ffffff, #141519);
+  --texte:           light-dark(#1f1d1a, #f2f2f5);
+  --texte-2:         light-dark(#8a8378, #848494);   /* titres de section, libellés discrets */
+  --texte-3:         light-dark(#96907f, #6e6e80);   /* textes d'aide */
+  --meta:            light-dark(#7a736a, #9a9aa8);   /* seconde ligne d'une carte */
 
-  --succes:          #6ee7a8;
-  --succes-faible:   rgba(110,231,168,0.1);
-  --alerte:          #ffb05a;
-  --alerte-faible:   rgba(255,176,90,0.09);
-  --alerte-bord:     rgba(255,176,90,0.22);
-  --alerte-texte:    #241603;   /* sur un bouton plein en couleur d'alerte */
+  --accent:          #e8503f;                        /* le rouge de la marque, identique partout */
+  --accent-clair:    light-dark(#c33d2c, #ff8f80);   /* accent lisible sur le fond du thème */
+  --accent-survol:   light-dark(#c33d2c, #f2705f);
+  --accent-faible:   light-dark(rgba(232,80,63,0.14), rgba(232,80,63,0.16));
+  --accent-bord:     light-dark(rgba(232,80,63,0.5),  rgba(232,80,63,0.45));
+  --accent-selection: light-dark(rgba(232,80,63,0.1), rgba(232,80,63,0.14));
 
-  --surface:         rgba(255,255,255,0.045);
-  --surface-bord:    rgba(255,255,255,0.07);
-  --surface-forte:   rgba(255,255,255,0.07);
-  --surface-survol:  rgba(255,255,255,0.12);
-  --creux:           rgba(0,0,0,0.28);   /* bloc d'URL, champs de saisie */
-  --champ-bord:      rgba(255,255,255,0.1);
+  --succes:          light-dark(#2f8a5a, #6ee7a8);
+  --succes-faible:   light-dark(rgba(47,138,90,0.1), rgba(110,231,168,0.1));
+  --alerte:          light-dark(#b57314, #ffb05a);
+  --alerte-faible:   light-dark(rgba(181,115,20,0.07), rgba(255,176,90,0.09));
+  --alerte-bord:     light-dark(rgba(181,115,20,0.28), rgba(255,176,90,0.22));
+  --alerte-texte:    light-dark(#ffffff, #241603);   /* sur un bouton plein en couleur d'alerte */
 
-  --bord-ligne:      rgba(255,255,255,0.07);
-  --bord-pointille:  rgba(255,255,255,0.14);
-  --puce-bord:       rgba(255,255,255,0.18);
-  --icone:           #7a7a8a;
-  --etoile-eteinte:  #55556a;
+  --surface:         light-dark(rgba(0,0,0,0.028), rgba(255,255,255,0.045));
+  --surface-bord:    light-dark(rgba(0,0,0,0.05),  rgba(255,255,255,0.07));
+  --surface-forte:   light-dark(rgba(0,0,0,0.05),  rgba(255,255,255,0.07));
+  --surface-survol:  light-dark(rgba(0,0,0,0.08),  rgba(255,255,255,0.12));
+  --creux:           light-dark(#ffffff, rgba(0,0,0,0.28));   /* bloc d'URL, champs de saisie */
+  /* En thème clair le champ est blanc sur fond blanc : c'est le contour, et lui
+     seul, qui le rend visible. --surface-bord serait trop pâle pour ça. */
+  --champ-bord:      light-dark(rgba(0,0,0,0.1), rgba(255,255,255,0.1));
 
-  --inactif-fond:    rgba(255,255,255,0.07);
-  --inactif-texte:   #6a6a7a;
+  --bord-ligne:      light-dark(#e7e3dc, rgba(255,255,255,0.07));
+  --bord-pointille:  light-dark(rgba(0,0,0,0.12), rgba(255,255,255,0.14));
+  --puce-bord:       light-dark(rgba(0,0,0,0.22), rgba(255,255,255,0.18));
+  --icone:           light-dark(#a49c8d, #7a7a8a);
+  --etoile-eteinte:  light-dark(#cfc9be, #55556a);
+
+  --inactif-fond:    light-dark(rgba(0,0,0,0.05), rgba(255,255,255,0.07));
+  --inactif-texte:   light-dark(#b3ada2, #6a6a7a);
+
+  --danger-fond:     light-dark(rgba(232,80,63,0.12), rgba(255,120,110,0.2));
+  --danger-texte:    light-dark(#c33d2c, #ff9c92);
+
+  /* `light-dark()` ne s'applique qu'aux COULEURS. Ces trois valeurs-là — deux
+     filtres et une opacité — gardent donc le schéma à trois branches, et sont
+     les seules à être écrites deux fois. */
   --survol:          brightness(1.25);
   --survol-plein:    brightness(1.1);
-
-  --danger-fond:     rgba(255,120,110,0.2);
-  --danger-texte:    #ff9c92;
+  --opacite-eteint:  0.6;
 }
 
+/* Mode automatique : on suit Firefox, sauf si l'utilisateur a explicitement
+   demandé le sombre. */
 @media (prefers-color-scheme: light) {
-  :root {
-    --fond:            #ffffff;
-    --texte:           #1f1d1a;
-    --texte-2:         #8a8378;
-    --texte-3:         #96907f;
-    --meta:            #7a736a;
-
-    --accent-clair:    #c33d2c;
-    --accent-survol:   #c33d2c;
-    --accent-faible:   rgba(232,80,63,0.14);
-    --accent-bord:     rgba(232,80,63,0.5);
-    --accent-selection: rgba(232,80,63,0.1);
-
-    --succes:          #2f8a5a;
-    --succes-faible:   rgba(47,138,90,0.1);
-    --alerte:          #b57314;
-    --alerte-faible:   rgba(181,115,20,0.07);
-    --alerte-bord:     rgba(181,115,20,0.28);
-    --alerte-texte:    #ffffff;
-
-    --surface:         rgba(0,0,0,0.028);
-    --surface-bord:    rgba(0,0,0,0.05);
-    --surface-forte:   rgba(0,0,0,0.05);
-    --surface-survol:  rgba(0,0,0,0.08);
-    --creux:           #ffffff;
-    /* En thème clair le champ est blanc sur fond blanc : c'est le contour, et lui
-       seul, qui le rend visible. --surface-bord serait trop pâle pour ça. */
-    --champ-bord:      rgba(0,0,0,0.1);
-
-    --bord-ligne:      #e7e3dc;
-    --bord-pointille:  rgba(0,0,0,0.12);
-    --puce-bord:       rgba(0,0,0,0.22);
-    --icone:           #a49c8d;
-    --etoile-eteinte:  #cfc9be;
-
-    --inactif-fond:    rgba(0,0,0,0.05);
-    --inactif-texte:   #b3ada2;
-    --survol:          brightness(0.975);
-    --survol-plein:    brightness(0.94);
-
-    --danger-fond:     rgba(232,80,63,0.12);
-    --danger-texte:    #c33d2c;
+  :root:not([data-theme="sombre"]) {
+    color-scheme: light;
+    --survol:         brightness(0.975);
+    --survol-plein:   brightness(0.94);
+    --opacite-eteint: 0.55;
   }
 }
+
+/* Choix explicite de l'utilisateur : il l'emporte dans les deux sens, y compris
+   contre un Firefox réglé à l'inverse. */
+:root[data-theme="clair"] {
+  color-scheme: light;
+  --survol:         brightness(0.975);
+  --survol-plein:   brightness(0.94);
+  --opacite-eteint: 0.55;
+}
+
+:root[data-theme="sombre"] { color-scheme: dark; }
 
 * {
   box-sizing: border-box;
@@ -183,6 +180,37 @@ header {
 }
 
 .marque-sep { color: var(--accent); }
+
+/* Le bouton de thème et la pastille forment un groupe à droite. `min-width: 0`
+   est indispensable : sans lui c'est le nom du serveur qui pousserait, au lieu
+   d'être tronqué comme prévu. */
+.entete-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.btn-theme {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 29px;
+  height: 29px;
+  background: var(--surface-forte);
+  border: none;
+  border-radius: 50%;
+  color: var(--texte-2);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.btn-theme:hover,
+.btn-theme:active {
+  background: var(--surface-survol);
+  color: var(--texte);
+}
 
 /* Entrée unique vers la gestion des serveurs : son point porte l'état du daemon
    actif, ce qui évite une pastille d'état séparée sans action associée. */
@@ -606,11 +634,7 @@ input[type="text"]::placeholder { color: var(--texte-3); }
 
 /* Un appareil éteint reste castable — le daemon resonde son IP — mais il ne doit
    pas se présenter comme équivalent à une TV allumée. */
-.ligne.eteint { opacity: 0.6; }
-
-@media (prefers-color-scheme: light) {
-  .ligne.eteint { opacity: 0.55; }
-}
+.ligne.eteint { opacity: var(--opacite-eteint); }
 
 .puce {
   border-radius: 50%;

@@ -399,7 +399,11 @@ Deux conditions à ne pas défaire : le pied doit avoir un fond **opaque** (`var
 
 Après : 360 px sur les cinq écrans, y compris avec l'URL de flux dépliée, et largeur minimale égale à la préférée (donc aucun débordement possible). Le `max-width: 100%` reste pour les écrans plus étroits que 360.
 
-**Thème clair et sombre** : un seul jeu de règles, toutes les couleurs derrière des variables CSS, `prefers-color-scheme` bascule l'ensemble. Pas d'interrupteur — la maquette montre les deux côte à côte pour les comparer, ce n'est pas un réglage du produit.
+**Thème clair et sombre** : un seul jeu de règles. Chaque couleur s'écrit `light-dark(clair, sombre)` et se résout d'après le `color-scheme` calculé sur `:root` — c'est donc lui seul qu'on bascule, et aucune couleur n'est écrite deux fois. Seules trois valeurs échappent à ce mécanisme, `light-dark()` ne s'appliquant qu'aux couleurs : `--survol`, `--survol-plein` et `--opacite-eteint` gardent un schéma à trois branches. `strict_min_version` étant à 140, `light-dark()` (Firefox 120+) est acquis.
+
+**Il y a bien un interrupteur de thème** — une note antérieure disait le contraire, elle a été démentie à l'usage. Le bouton de l'en-tête fait tourner automatique → clair → sombre et pose `data-theme` sur `<html>` ; `auto` ne pose rien et laisse le media query décider. La raison est une particularité de Firefox, pas un caprice : **le réglage « Apparence des sites web » ne s'applique qu'au contenu web.** Une page `moz-extension://` fait partie de l'interface du navigateur et suit donc le **thème de Firefox**. Sans ce bouton, afficher re:cast en clair imposait de basculer tout Firefox en clair.
+
+Le thème est lu depuis le storage **avant tout rendu** : le choix explicite n'étant connu qu'après une lecture asynchrone, tout ce qui s'afficherait avant apparaîtrait dans l'autre thème.
 
 La maquette est dessinée en Archivo / IBM Plex Mono. Le popup reste sur la **pile système** : la CSP interdit une police distante, et le popup doit s'ouvrir hors ligne. Roboto sur Android, Segoe UI sur Windows — deux grotesques proches du dessin d'Archivo.
 
