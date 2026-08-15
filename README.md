@@ -29,10 +29,20 @@ re:cast ne partage pas l'écran. Il **repère l'URL du flux** que le lecteur est
 ## À quoi ça ressemble
 
 <p align="center">
-  <img src="docs/extension.png" alt="Le popup de l'extension Firefox" width="620">
+  <img src="docs/en-situation.webp" alt="re:cast ouvert sur une page en lecture dans Firefox" width="880">
 </p>
 
-Le popup de l'extension : l'adresse du PC, le flux détecté sur la page, les appareils trouvés sur le réseau. Un même téléviseur apparaît une fois par protocole qu'il annonce.
+Une vidéo en cours de lecture, le popup ouvert par-dessus : re:cast a déjà repéré le flux HLS de la page — l'URL complète est dépliée — et n'attend plus que le choix de l'appareil.
+
+<p align="center">
+  <img src="docs/popup-appareils.png" alt="Le popup : flux détecté et appareils du réseau" width="250">
+  &nbsp;
+  <img src="docs/popup-serveurs.png" alt="Le popup : les serveurs re:cast enregistrés" width="250">
+  &nbsp;
+  <img src="docs/popup-lecture.png" alt="Le popup : la lecture en cours sur la TV" width="250">
+</p>
+
+Le popup de l'extension est la seule interface : le flux repéré sur la page, les appareils trouvés sur le réseau, puis l'état de la lecture. Un même téléviseur apparaît **une fois par protocole qu'il annonce** — ici la 85" QLED répond en Chromecast *et* en DLNA. L'écran du milieu gère les serveurs re:cast, un par lieu ou par machine : quand tu changes de réseau, re:cast bascule seul sur celui qui répond.
 
 <p align="center">
   <img src="docs/menu.png" alt="Le menu de l'app Windows" height="250">
