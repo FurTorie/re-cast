@@ -84,98 +84,49 @@ jobs:
           fi
           echo "Les deux secrets AMO sont présents."
 
-      # --self-hosted est indispensable ici : sans lui, le linter applique les règles
-      # des extensions hébergées par Mozilla et rejette `update_url` en ERREUR, alors
-      # que cette clé est précisément ce qui permet à une extension auto-hébergée de
-      # se mettre à jour toute seule.
+      # Plus de --self-hosted : ce drapeau ne servait qu'à faire tolérer
+      # `update_url`, que Mozilla refuse sur un add-on qu'il héberge. La clé a
+      # été retirée du manifeste avec le passage en listed, et garder le drapeau
+      # masquerait désormais d'autres règles propres au catalogue.
       - name: Vérifier l'extension
         if: steps.check.outputs.publier == 'oui'
-        run: npx --yes web-ext lint --source-dir=extension --self-hosted
+        run: npx --yes web-ext lint --source-dir=extension
 
-      # Canal unlisted : signature quasi immédiate, sans revue éditoriale.
-      # Pour passer en public plus tard, remplacer par --channel=listed (la toute
-      # première soumission listed doit se faire à la main sur addons.mozilla.org).
-      # Les identifiants passent par l'environnement, jamais en arguments : web-ext
-      # lit nativement WEB_EXT_API_KEY / WEB_EXT_API_SECRET, et une ligne de commande
-      # est visible dans la liste des processus comme dans les messages d'erreur.
-      - name: Signer via l'API AMO
+      - name: Construire le paquet
+        if: steps.check.outputs.publier == 'oui'
+        run: |
+          mkdir -p dist
+          cd extension && zip -qr ../dist/recast.zip . && cd ..
+          ls -l dist/recast.zip
+
+      # Canal listed : Mozilla héberge et distribue, et chaque version passe une
+      # revue. La soumission se fait par l'API v5 plutôt que par `web-ext sign`,
+      # qui sait signer mais pas renseigner les métadonnées qu'une fiche publique
+      # exige — catégories et licence, les deux champs qui manquaient ici.
+      - name: Soumettre à AMO
         if: steps.check.outputs.publier == 'oui'
         env:
-          WEB_EXT_API_KEY:    ${{ secrets.AMO_API_KEY }}
-          WEB_EXT_API_SECRET: ${{ secrets.AMO_API_SECRET }}
-        run: |
-          npx --yes web-ext sign \
-            --source-dir=extension \
-            --artifacts-dir=dist \
-            --channel=unlisted
+          AMO_KEY:    ${{ secrets.AMO_API_KEY }}
+          AMO_SECRET: ${{ secrets.AMO_API_SECRET }}
+          ZIP:        dist/recast.zip
+          RACINE:     .
+        run: node .github/amo/publier.mjs
 
-      - name: Publier le .xpi signé en release
+      # Le .xpi signé n'est pas joint : en listed c'est Mozilla qui distribue, et
+      # le fichier n'existe de toute façon qu'une fois la revue passée. La release
+      # sert de repère de version et renvoie vers la fiche publique.
+      - name: Marquer la version d'une release
         if: steps.check.outputs.publier == 'oui'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.v.outputs.tag }}
           name: Extension ${{ steps.v.outputs.version }}
           body: |
-            Extension re:cast ${{ steps.v.outputs.version }}, signée par Mozilla (canal unlisted).
+            Extension re:cast ${{ steps.v.outputs.version }}, soumise au catalogue Mozilla.
 
-            Installation : télécharger le `.xpi` puis l'ouvrir dans Firefox.
-            Les installations existantes se mettront à jour toutes seules.
-          files: dist/*.xpi
+            Installation : <https://addons.mozilla.org/firefox/addon/re-cast/>
+            La mise en ligne suit la revue Mozilla, elle n'est pas immédiate.
 
-      # updates.json est le manifeste que Firefox interroge pour savoir si une
-      # nouvelle version existe. Il est écrit APRÈS la release, pour que le lien
-      # de téléchargement qu'il contient soit déjà valide.
-      - name: Mettre à jour updates.json
-        if: steps.check.outputs.publier == 'oui'
-        env:
-          VERSION: ${{ steps.v.outputs.version }}
-          TAG:     ${{ steps.v.outputs.tag }}
-          DEPOT:   ${{ github.repository }}
-        run: |
-          NOM=$(basename "$(ls dist/*.xpi | head -1)")
-          export LIEN="https://github.com/$DEPOT/releases/download/$TAG/$NOM"
-          echo "Lien de mise à jour : $LIEN"
-          node - <<'EOF'
-          const fs = require('fs');
-          const id = require('./extension/manifest.json').browser_specific_settings.gecko.id;
-          const j  = JSON.parse(fs.readFileSync('updates.json', 'utf8'));
-
-          j.addons[id] = j.addons[id] || { updates: [] };
-          const liste = j.addons[id].updates.filter(u => u.version !== process.env.VERSION);
-          liste.push({ version: process.env.VERSION, update_link: process.env.LIEN });
-          liste.sort((a, b) => a.version.localeCompare(b.version, undefined, { numeric: true }));
-
-          j.addons[id].updates = liste;
-          fs.writeFileSync('updates.json', JSON.stringify(j, null, 2) + '\n');
-          EOF
-
-      # Ce commit ne touche qu'updates.json, hors du filtre `paths` du workflow :
-      # il ne peut donc pas déclencher une nouvelle exécution en boucle.
-      #
-      # Le push est RÉESSAYÉ, et ce n'est pas de la prudence gratuite. La
-      # signature AMO prend plusieurs minutes, pendant lesquelles le dépôt reçoit
-      # sans mal d'autres commits — un dépôt à trois moitiés y invite. Le push
-      # partait alors d'une base périmée et se faisait rejeter, l'étape échouait,
-      # et updates.json restait en arrière. Silencieusement : la release existait,
-      # le .xpi était bien publié, seul le fichier que Firefox interroge ne
-      # bougeait pas. Les versions 0.1.6 et 0.1.7 ont été perdues ainsi.
-      - name: Committer updates.json
-        if: steps.check.outputs.publier == 'oui'
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add updates.json
-          git diff --staged --quiet && echo "rien à committer" && exit 0
-          git commit -m "updates.json : extension ${{ steps.v.outputs.version }}"
-
-          for essai in 1 2 3 4 5; do
-            if git push; then
-              echo "updates.json poussé (essai $essai)"
-              exit 0
-            fi
-            echo "Push rejeté — rebase sur origin/main puis nouvel essai ($essai/5)"
-            git pull --rebase origin main || exit 1
-            sleep $((essai * 3))
-          done
-          echo "::error::updates.json n'a pas pu être poussé après 5 essais."
-          exit 1
+            Les installations antérieures à la 0.1.16 venaient du canal auto-hébergé
+            et ne se mettent plus à jour toutes seules : il faut réinstaller depuis
+            le catalogue.

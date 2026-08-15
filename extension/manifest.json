@@ -1,13 +1,12 @@
 {
   "manifest_version": 2,
   "name": "re:cast",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "Caster la vidéo d'un onglet vers une TV Chromecast, DLNA ou AirPlay, en résolution native. Nécessite le daemon re:cast sur un PC du réseau.",
   "browser_specific_settings": {
     "gecko": {
       "id": "recast@recast-extension",
       "strict_min_version": "140.0",
-      "update_url": "https://raw.githubusercontent.com/FurTorie/re-cast/main/updates.json",
       "data_collection_permissions": {
         "required": [
           "none"
