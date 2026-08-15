@@ -9,6 +9,7 @@ on:
     paths:
       - 'extension/**'
       - '.github/workflows/release-extension.yml'
+      - '.github/amo/**'          # le script de soumission et les notes de revue
   workflow_dispatch:
 
 permissions:

@@ -130,9 +130,13 @@ const creation = await appel(`/addons/addon/${ID}/versions/`, {
   body: JSON.stringify({
     upload: uuid,
     approval_notes: notes,
+    // La locale doit être en-US : c'est la locale PAR DÉFAUT de l'add-on, et
+    // l'API exige une valeur dans celle-là. Le nom affiché de re:cast est en
+    // français, ce qui induit en erreur — la locale par défaut est un réglage
+    // distinct de la langue des textes. Refus mesuré avec `fr` seul.
     custom_license: {
-      name: { fr: 'PolyForm Noncommercial License 1.0.0' },
-      text: { fr: texteLicence }
+      name: { 'en-US': 'PolyForm Noncommercial License 1.0.0' },
+      text: { 'en-US': texteLicence }
     }
   })
 });
