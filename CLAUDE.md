@@ -381,6 +381,24 @@ Trois conséquences de forme :
 - **La valeur d'un champ d'édition vit dans l'état, pas dans le DOM** (`editValeur`, `editServeurValeur`). Un rendu déclenché pendant la frappe — fin d'un scan, réponse d'une sonde — recrée le champ, et la saisie serait perdue. Le drapeau `focusAPrendre` évite au passage de reprendre le focus à chaque rendu : sans lui, `select()` rejouait à chaque fois et la frappe suivante effaçait tout.
 - **L'état de lecture est restauré depuis `/status`.** `state.js` y joint désormais `host` et un `protocole` lisible (`Chromecast`, pas `CHROMECAST`) : c'est tout ce que le popup a pour réafficher « En lecture · DLNA · 192.168.1.222 » après une fermeture de Firefox.
 
+**Le pied de page est `sticky`, jamais `fixed`.** Le bouton d'action — « Caster » en tête — se retrouvait sous la ligne de flottaison dès que la liste d'appareils s'allongeait, donc hors de portée du pouce en vue plein écran. `position: fixed` le ramènerait en bas, mais au prix d'une sortie du flux : le popup desktop se dimensionne sur son contenu, il réserverait une bande vide en permanence et le bouton flotterait au-dessus des dernières lignes même sans rien à faire défiler. `sticky` ne s'active que lorsqu'il y a effectivement de quoi défiler. Mesuré sur un banc d'essai à 360 × 560 px :
+
+| | Position du pied |
+|---|---|
+| 6 appareils (document 726 px) | `478..560` — plaqué au bas de la fenêtre, contre `644..726` sans la règle, soit hors écran |
+| 1 appareil (document 381 px) | collé à la dernière ligne, aucune bande vide sous lui |
+
+Deux conditions à ne pas défaire : le pied doit avoir un fond **opaque** (`var(--fond)`), puisque les lignes défilent dessous, et `#app` ne doit **pas** porter de `padding-bottom` — cet espace resterait au bas du document sans jamais servir. Et pas de dégradé de raccord au-dessus : essayé, retiré. Il suppose que la zone juste au-dessus du pied soit vide quand rien ne défile, or sur les écrans secondaires le texte d'aide s'y trouve et ressortait grisé en permanence.
+
+**La largeur de `#app` est fixe (`width: 360px`), pas un simple `max-width`.** Tant que c'était un plafond, la largeur préférée dépendait encore du contenu et changeait d'un écran à l'autre — le popup desktop s'élargissait dès qu'on ouvrait « Ajouter un appareil » ou la gestion des serveurs. Mesuré, avant correctif :
+
+| Vue | Largeur préférée |
+|---|---|
+| principale, lecture | 360 px — aucun texte long, on tombe sur le plancher `min-width` du body |
+| serveurs, ajout serveur, ajout appareil | 420 px — le texte d'aide vient buter sur l'ancien plafond |
+
+Après : 360 px sur les cinq écrans, y compris avec l'URL de flux dépliée, et largeur minimale égale à la préférée (donc aucun débordement possible). Le `max-width: 100%` reste pour les écrans plus étroits que 360.
+
 **Thème clair et sombre** : un seul jeu de règles, toutes les couleurs derrière des variables CSS, `prefers-color-scheme` bascule l'ensemble. Pas d'interrupteur — la maquette montre les deux côte à côte pour les comparer, ce n'est pas un réglage du produit.
 
 La maquette est dessinée en Archivo / IBM Plex Mono. Le popup reste sur la **pile système** : la CSP interdit une police distante, et le popup doit s'ouvrir hors ligne. Roboto sur Android, Segoe UI sur Windows — deux grotesques proches du dessin d'Archivo.

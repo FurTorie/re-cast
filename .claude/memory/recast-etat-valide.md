@@ -15,6 +15,6 @@ Leçon à garder au-delà de ce projet : une hypothèse validée en simulation n
 
 **Cette refonte n'a pas encore vu la TV.** C'est exactement le piège que ce fichier documente plus haut : tant que le matériel n'a pas tranché, elle est « écrite », pas « validée ». Le cœur du cast, lui, n'a pas bougé.
 
-Un chantier d'interface reste ouvert, non bloquant : le bouton `📡 Caster` à fixer ou non en bas de l'écran en vue plein écran — question posée à l'utilisateur, jamais tranchée. Moins pressant depuis que l'URL du flux est repliée par défaut, ce qui raccourcit l'écran.
+**Le chantier du bouton « Caster » est tranché** (2026-08-15, extension 0.1.14) : le pied de page est `sticky`, pas `fixed` — il se plaque au bas de l'écran seulement quand il y a de quoi défiler, et reste dans le flux sinon. Vérifié au banc d'essai dans les deux thèmes ; le détail et les chiffres sont dans `CLAUDE.md`.
 
 Voir [[recast-cible-android]].

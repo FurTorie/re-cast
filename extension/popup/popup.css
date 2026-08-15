@@ -149,12 +149,21 @@ body {
      `word-break: break-all` sur le bloc d'URL ne suffit PAS : il autorise la
      coupure à l'affichage sans réduire la largeur préférée. Vérifié aussi pour
      `overflow-wrap: anywhere`. Seule une borne explicite ici y change quelque
-     chose. 420 px laisse la vue plein écran occuper tout l'écran d'un téléphone
-     (360 à 412 px), et centre le contenu au-delà. */
-  max-width: 420px;
+     chose.
+     Et cette borne doit être une largeur FIXE, pas un `max-width` : tant qu'elle
+     était un simple plafond, la préférée dépendait encore du contenu, et elle
+     changeait d'un écran à l'autre — 360 px sur la vue principale, qui n'a aucun
+     texte long, contre 420 px sur les écrans secondaires, dont le texte d'aide
+     vient buter sur le plafond. Le popup desktop s'élargissait donc à chaque fois
+     qu'on ouvrait « Ajouter un appareil » ou la gestion des serveurs. Mesuré.
+     360 px est la largeur de la maquette et tient sur tout téléphone ; le
+     `max-width: 100%` couvre les écrans plus étroits. */
+  width: 360px;
+  max-width: 100%;
   margin: 0 auto;
-  width: 100%;
-  padding-bottom: 4px;
+  /* Pas de padding-bottom ici : le pied est collant, et un espace sous lui
+     resterait en bas du document sans jamais servir. C'est `.pied` qui porte
+     désormais cette respiration. */
 }
 
 /* ── En-tête ───────────────────────────────────────────────────────────────── */
@@ -262,9 +271,31 @@ header {
   padding: 0 12px;
 }
 
+/* Le pied est COLLANT, pas fixe, et la nuance fait tout le correctif.
+   Sur la vue plein écran d'Android, une liste de plusieurs appareils pousse
+   « Caster » — l'action même pour laquelle on ouvre le popup — sous la ligne de
+   flottaison, et hors de portée du pouce. Un pied `fixed` le ramènerait bien en
+   bas, mais il sortirait du flux : le popup desktop, qui se dimensionne sur son
+   contenu, réserverait une bande vide en permanence et le bouton flotterait
+   au-dessus des dernières lignes même quand rien ne défile.
+   `sticky` ne se déclenche que lorsqu'il y a effectivement de quoi défiler :
+   contenu court, le pied reste exactement où il est aujourd'hui ; contenu long,
+   il se plaque au bas de l'écran. */
 .pied {
-  padding: 14px 12px;
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  /* Un fond OPAQUE est indispensable : les lignes passent dessous. */
+  background: var(--fond);
+  padding: 14px 12px 18px;
 }
+
+/* Pas de dégradé de raccord au-dessus du pied : l'idée paraissait bonne — les
+   lignes s'effaçant sous le bouton plutôt que d'y être tranchées net — mais elle
+   suppose que la zone juste au-dessus soit vide quand rien ne défile. Elle ne
+   l'est pas : sur les écrans secondaires, le texte d'aide s'y trouve, et il
+   ressortait grisé en permanence. Une coupe franche sous un pied opaque se lit
+   très bien. */
 
 .pied.colonne {
   display: flex;
