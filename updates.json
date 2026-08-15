@@ -49,6 +49,10 @@
         {
           "version": "0.1.14",
           "update_link": "https://github.com/FurTorie/re-cast/releases/download/extension-v0.1.14/re_cast-0.1.14.xpi"
+        },
+        {
+          "version": "0.1.15",
+          "update_link": "https://github.com/FurTorie/re-cast/releases/download/extension-v0.1.15/re_cast-0.1.15.xpi"
         }
       ]
     }
