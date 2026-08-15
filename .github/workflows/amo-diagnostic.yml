@@ -1,0 +1,92 @@
+name: Diagnostic AMO
+
+# Lit l'état de l'add-on sur addons.mozilla.org et n'écrit RIEN : aucune
+# soumission, aucune signature. Il existe parce que les clés AMO vivent dans les
+# secrets du dépôt — donc interrogeables seulement depuis un workflow — et que la
+# documentation publique ne dit pas si un numéro de version peut exister à la
+# fois en listed et en unlisted. Cette réponse décide de la suite : garder les
+# deux canaux le temps d'une transition, ou basculer d'un coup.
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Interroger l'API AMO
+        env:
+          CLE:    ${{ secrets.AMO_API_KEY }}
+          SECRET: ${{ secrets.AMO_API_SECRET }}
+        run: |
+          node - <<'EOF'
+          const crypto = require('crypto');
+
+          // JWT HS256 signé à la main : l'API AMO en attend un de courte durée.
+          // Aucune dépendance à installer, et surtout rien à journaliser — ni la
+          // clé, ni le jeton ne doivent apparaître dans la sortie du workflow.
+          const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+          const maintenant = Math.floor(Date.now() / 1000);
+          const entete  = b64({ alg: 'HS256', typ: 'JWT' });
+          const charge  = b64({
+            iss: process.env.CLE,
+            jti: crypto.randomBytes(8).toString('hex'),
+            iat: maintenant,
+            exp: maintenant + 240
+          });
+          const signature = crypto.createHmac('sha256', process.env.SECRET)
+            .update(entete + '.' + charge).digest('base64url');
+          const jeton = entete + '.' + charge + '.' + signature;
+
+          const ID = require('./extension/manifest.json')
+            .browser_specific_settings.gecko.id;
+
+          const appel = async (chemin) => {
+            const r = await fetch('https://addons.mozilla.org' + chemin, {
+              headers: { Authorization: 'JWT ' + jeton }
+            });
+            const corps = await r.text();
+            let j = null;
+            try { j = JSON.parse(corps); } catch {}
+            return { statut: r.status, j, corps };
+          };
+
+          (async () => {
+            const fiche = await appel('/api/v5/addons/addon/' + ID + '/');
+            console.log('--- Fiche de l\'add-on ---');
+            console.log('statut HTTP :', fiche.statut);
+            if (fiche.j) {
+              console.log('slug        :', fiche.j.slug);
+              console.log('statut      :', fiche.j.status);
+              console.log('is_listed   :', fiche.j.is_listed);
+              console.log('nom         :', JSON.stringify(fiche.j.name));
+              console.log('résumé      :', JSON.stringify(fiche.j.summary));
+              console.log('catégories  :', JSON.stringify(fiche.j.categories));
+              console.log('licence     :', JSON.stringify(fiche.j.current_version?.license));
+            } else {
+              console.log(fiche.corps.slice(0, 500));
+            }
+
+            // filter=all_with_unlisted : sans lui, les versions unlisted sont
+            // invisibles, et c'est précisément ce qu'on cherche à voir.
+            const versions = await appel(
+              '/api/v5/addons/addon/' + ID + '/versions/?filter=all_with_unlisted');
+            console.log('\n--- Versions connues d\'AMO ---');
+            console.log('statut HTTP :', versions.statut);
+            if (versions.j?.results) {
+              console.log('total :', versions.j.count);
+              for (const v of versions.j.results) {
+                console.log(' ', String(v.version).padEnd(10),
+                  'canal=' + v.channel,
+                  'statut=' + (v.file?.status || '?'));
+              }
+            } else {
+              console.log(versions.corps.slice(0, 500));
+            }
+          })().catch(e => { console.error('Échec :', e.message); process.exit(1); });
+          EOF
