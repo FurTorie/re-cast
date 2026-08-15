@@ -10,19 +10,15 @@
 </p>
 
 <p align="center">
-  <!-- AUCUNE LIGNE VIDE dans ce commentaire : en Markdown elle termine le bloc
-       HTML, le "<!--" et son "-->" se retrouvent alors dans deux blocs distincts,
-       le second est échappé, et le navigateur avale tout le README comme un
-       commentaire jamais fermé. Vécu : le fichier ne montrait plus que son titre.
-       sort=semver est indispensable : par défaut shields trie les tags dans
-       l'ordre alphabétique, et annonçait donc app-v0.1.9 alors que la dernière
-       version publiée était app-v0.1.20.
-       Chaque badge mène aux releases de SON morceau, via la recherche de la page
-       des releases (?q=). GitHub ne sait pas cibler « la dernière release portant
-       tel préfixe de tag » : /releases/latest ignore les préfixes et renverrait le
-       dernier morceau publié, quel qu'il soit, tandis qu'un lien vers un tag
-       précis serait périmé dès la publication suivante. La page filtrée, elle,
-       reste juste et montre l'historique du morceau. -->
+  <!-- Deux règles pour ce commentaire, chacune payée d'un README cassé : pas de
+       ligne vide (elle termine le bloc HTML), et ne jamais y écrire un délimiteur
+       de commentaire en toutes lettres (il le referme sur place).
+       sort=semver est indispensable : sans lui shields trie les tags dans l'ordre
+       alphabétique et annonce app-v0.1.9 comme dernière version.
+       Les liens passent par la recherche de la page des releases, car GitHub ne
+       sait pas cibler la dernière release portant un préfixe de tag donné :
+       /releases/latest renverrait le dernier morceau publié, quel qu'il soit, et
+       un lien vers un tag précis serait périmé à la publication suivante. -->
   <a href="../../releases?q=extension&amp;expanded=true"><img alt="Extension Firefox" src="https://img.shields.io/github/v/release/FurTorie/re-cast?filter=extension-*&sort=semver&label=extension&color=E74C3C"></a>
   <a href="../../releases?q=daemon&amp;expanded=true"><img alt="Daemon" src="https://img.shields.io/github/v/release/FurTorie/re-cast?filter=daemon-*&sort=semver&label=daemon&color=E74C3C"></a>
   <a href="../../releases?q=app&amp;expanded=true"><img alt="App Windows" src="https://img.shields.io/github/v/release/FurTorie/re-cast?filter=app-*&sort=semver&label=app%20Windows&color=E74C3C"></a>
